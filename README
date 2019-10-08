@@ -1,0 +1,63 @@
+#
+# CDDL HEADER START
+#
+# The contents of this file are subject to the terms of the Common Development
+# and Distribution License Version 1.0 (the "License").
+#
+# You can obtain a copy of the license at
+# http://www.opensource.org/licenses/CDDL-1.0.  See the License for the
+# specific language governing permissions and limitations under the License.
+#
+# When distributing Covered Code, include this CDDL HEADER in each file and
+# include the License file in a prominent location with the name LICENSE.CDDL.
+# If applicable, add the following below this CDDL HEADER, with the fields
+# enclosed by brackets "[]" replaced with your own identifying information:
+#
+# Portions Copyright (c) [yyyy] [name of copyright owner]. All rights reserved.
+#
+# CDDL HEADER END
+#
+
+#
+# Copyright (c) 2015--2019, Regents of the University of Minnesota.
+# All rights reserved.
+#
+# Contributors:
+#    Yaser Afshar
+#
+
+
+This directory contains a spectral neighbor analysis potential (SNAP)[1]
+Driver. It uses bispectrum components to characterize the local neighborhood
+of each atom in a very general way. The driver is written in C++ and it
+expects a SNAP coefficient file followed by a SNAP parameter file.
+
+The format of the SNAP coefficient file is as follows:
+
+* Blank lines and lines beginning with the `#' character are ignored.
+
+* Line 0 : nelem, ncoeff
+   - nelem     : number of elements
+   - ncoeff    : number of coefficients
+
+* One block for each of the nelem elements.
+* Line 1 of each block : Element, R, W
+   - Element   : Element symbol (text string)
+   - R         : Element radius (distance units)
+   - W         : Element weight (dimensionless)
+* Line 2,3,...,ncoeff+1 of each block : coeffs
+   - coeffs    : SNAP coefficients, one per line.
+
+The format of the SNAP parameter file is as follows:
+
+* Blank lines and lines beginning with the `#' character are ignored.
+* Non-blank and non-comment lines must contain one keyword/value pair.
+
+* The required keywords are rcutfac and twojmax.
+* Optional keywords are rfac0, rmin0, switchflag, bzeroflag, and quadraticflag.
+
+References:
+
+1. Thompson, Swiler, Trott, Foiles, Tucker, "Spectral neighbor analysis method
+for automated generation of quantum-accurate interatomic potentials," J Comp
+Phys, 285, 316 (2015).
