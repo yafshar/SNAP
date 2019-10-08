@@ -22,7 +22,7 @@
 #
 
 #
-# Copyright (c) 2013--2015, Regents of the University of Minnesota.
+# Copyright (c) 2013--2019, Regents of the University of Minnesota.
 # All rights reserved.
 #
 # Contributors:
@@ -34,14 +34,14 @@
 
 flName=SNAPImplementationComputeDispatch.cpp
 
-printf "  switch (GetComputeIndex(isComputeProcess_dEdr,\n"   >  $flName
-printf "                          isComputeProcess_d2Edr2,\n" >> $flName
-printf "                          isComputeEnergy,\n"         >> $flName
-printf "                          isComputeForces,\n"         >> $flName
-printf "                          isComputeParticleEnergy,\n" >> $flName
-printf "                          isComputeVirial,\n"         >> $flName
-printf "                          isComputeParticleVirial,\n" >> $flName
-printf "  {\n"                                                >> $flName
+printf "  switch (getComputeIndex(isComputeProcess_dEdr,\n"    >> $flName
+printf "                          isComputeProcess_d2Edr2,\n"  >> $flName
+printf "                          isComputeEnergy,\n"          >> $flName
+printf "                          isComputeForces,\n"          >> $flName
+printf "                          isComputeParticleEnergy,\n"  >> $flName
+printf "                          isComputeVirial,\n"          >> $flName
+printf "                          isComputeParticleVirial))\n" >> $flName
+printf "  {\n"                                                 >> $flName
 
 i=0
 for processdE in false true; do
