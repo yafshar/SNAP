@@ -28,9 +28,8 @@
 #    Ryan S. Elliott
 #
 
-#
+
 # Required preamble
-#
 
 cmake_minimum_required(VERSION 3.4)
 
@@ -44,8 +43,10 @@ endif()
 
 # End preamble
 
+# This model driver requires C++11
+set(CMAKE_CXX_STANDARD 11)
 
-set(MODEL_DRIVER_NAME "SNAP__MD_000000000000_000")
+set(MODEL_DRIVER_NAME "SNAP__MD_000000123456_000")
 
 add_kim_api_model_driver_library(
   NAME                    ${MODEL_DRIVER_NAME}
@@ -56,4 +57,5 @@ add_kim_api_model_driver_library(
 target_sources(${MODEL_DRIVER_NAME} PRIVATE
   SNAP.cpp
   SNAPImplementation.cpp
+  SNA.cpp
   )
