@@ -1,11 +1,43 @@
+//
+// CDDL HEADER START
+//
+// The contents of this file are subject to the terms of the Common Development
+// and Distribution License Version 1.0 (the "License").
+//
+// You can obtain a copy of the license at
+// http://www.opensource.org/licenses/CDDL-1.0.  See the License for the
+// specific language governing permissions and limitations under the License.
+//
+// When distributing Covered Code, include this CDDL HEADER in each file and
+// include the License file in a prominent location with the name LICENSE.CDDL.
+// If applicable, add the following below this CDDL HEADER, with the fields
+// enclosed by brackets "[]" replaced with your own identifying information:
+//
+// Portions Copyright (c) [yyyy] [name of copyright owner]. All rights reserved.
+//
+// CDDL HEADER END
+//
+
+//
+// Copyright (c) 2019, Regents of the University of Minnesota.
+// All rights reserved.
+//
+// Contributors:
+//    Yaser Afshar
+//    Ryan S. Elliott
+//
+
+
 #ifndef SNAP_IMPLEMENTATION_HPP
 #define SNAP_IMPLEMENTATION_HPP
 
-#include "SNAP.hpp"
+#include "KIM_ModelDriverHeaders.hpp"
+
+#include "helper.hpp"
 #include "SNA.hpp"
 
 #include <vector>
-#include <cmath>
+#include <memory>
 
 #ifdef NUM_PARAMETER_FILES
 #undef NUM_PARAMETER_FILES
@@ -235,10 +267,10 @@ private:
   /*!
    * \brief Use (possibly) new values of parameters to compute other quantities
    *
-   * \tparam ModelObj Model object
+   * \tparam ModelObj A %KIM API Model object
    *
-   * \param modelObj It is a modelDriverCreate object during initialization or
-   *                 a modelRefresh object when the Model's parameters have been altered
+   * \param modelObj It is a %KIM API ModelDriverCreate object during initialization or
+   *                 a ModelRefresh object when the Model's parameters have been altered
    *
    * \return int 0|false if everything goes well and 1|true if it fails
    */
@@ -255,7 +287,7 @@ private:
   int RegisterKIMModelSettings(KIM::ModelDriverCreate *const modelDriverCreate) const;
 
   /*!
-   * \brief
+   * \brief Register %KIM API parameters
    *
    * \param modelDriverCreate A %KIM API Model object
    *
@@ -273,7 +305,7 @@ private:
   int RegisterKIMFunctions(KIM::ModelDriverCreate *const modelDriverCreate) const;
 
   /*!
-   * \brief Register %KIM API ComputeArgumentsSettings
+   * \brief Register %KIM API arguments settings
    *
    * \param modelComputeArgumentsCreate
    *
@@ -434,15 +466,8 @@ private:
    */
   Array2D<double> bispectrum;
 
-  // Mutable values that only change when Refresh() executes
-  //   Set in Refresh (via setRefreshMutableValues)
-  //
-  // KIM API: Model Parameters (can be changed directly by KIM Simulator)
-  //
+  /*! Cutoff square for pair interactions */
   Array2D<double> cutsq;
-
-  // int *map;            // mapping from atom types to elements
-  // double wj1, wj2;
 
   /*! SNAP object */
   std::unique_ptr<SNA> snap;
