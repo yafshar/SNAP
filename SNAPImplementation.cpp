@@ -1,6 +1,37 @@
+//
+// CDDL HEADER START
+//
+// The contents of this file are subject to the terms of the Common Development
+// and Distribution License Version 1.0 (the "License").
+//
+// You can obtain a copy of the license at
+// http://www.opensource.org/licenses/CDDL-1.0.  See the License for the
+// specific language governing permissions and limitations under the License.
+//
+// When distributing Covered Code, include this CDDL HEADER in each file and
+// include the License file in a prominent location with the name LICENSE.CDDL.
+// If applicable, add the following below this CDDL HEADER, with the fields
+// enclosed by brackets "[]" replaced with your own identifying information:
+//
+// Portions Copyright (c) [yyyy] [name of copyright owner]. All rights reserved.
+//
+// CDDL HEADER END
+//
+
+//
+// Copyright (c) 2019, Regents of the University of Minnesota.
+// All rights reserved.
+//
+// Contributors:
+//    Yaser Afshar
+//    Ryan S. Elliott
+//
+
+
 #include "KIM_ModelDriverHeaders.hpp"
 #include "KIM_LogMacros.hpp"
 
+#include "SNAP.hpp"
 #include "SNAPImplementation.hpp"
 
 #include <cstdio>
@@ -39,11 +70,11 @@ SNAPImplementation::SNAPImplementation(
     int *const ier) : cachedNumberOfParticles_(0),
                       nelements(0),
                       ncoeffall(0),
+                      twojmax(0),
                       ncoeff(0),
                       switchflag(1),    // Set defaults for optional keywords
                       bzeroflag(1),     // Set defaults for optional keywords
                       quadraticflag(0), // Set defaults for optional keywords
-                      twojmax(0),
                       beta_max(0),
                       rfac0(0.99363), // Set defaults for optional keywords
                       rmin0(0.0),
@@ -180,8 +211,7 @@ int SNAPImplementation::WriteParameterizedModel(KIM::ModelWriteParameterizedMode
     // nelements & ncoeffall
     fs << nelements << " " << ncoeffall << std::endl;
 
-    fs.setprecision(std::numeric_limits<double>::digits10 + 1);
-    fs << std::fixed;
+    fs << std::setprecision(std::numeric_limits<double>::digits10 + 1) << std::fixed;
 
     // Loop over nelements blocks in the SNAP coefficient file
     for (int ielem = 0; ielem < nelements; ++ielem)
@@ -232,11 +262,10 @@ int SNAPImplementation::WriteParameterizedModel(KIM::ModelWriteParameterizedMode
     {
       fs << elements[ielem] << " ";
     }
-    fs << "\n"
-       << std::endl;
+    fs << "\n";
+    fs << std::endl;
 
-    fs.setprecision(std::numeric_limits<double>::digits10 + 1);
-    fs << std::fixed;
+    fs << std::setprecision(std::numeric_limits<double>::digits10 + 1) << std::fixed;
 
     // rcutfac
     fs << "rcutfac       " << rcutfac << std::endl;
@@ -422,7 +451,7 @@ void SNAPImplementation::GetNextDataLine(std::FILE *const filePtr,
 
 #define KIM_LOGGER_OBJECT_NAME modelDriverCreate
 int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const modelDriverCreate,
-                                              int const numberParameterFiles,
+                                              int const /* numberParameterFiles */,
                                               std::FILE *const *parameterFilePointers)
 {
   char nextLine[MAXLINE];
@@ -752,14 +781,13 @@ int SNAPImplementation::setRefreshMutableValues(ModelObj *const modelObj)
   // Extra check
   if (ncoeff != snap->ncoeff)
   {
-    *ier = true;
     std::string msg = "Wrong number of coefficients \n";
     msg += "Number of coefficients to the model and the one created in SNAP object do not match \n";
     msg += "ncoeff = " + std::to_string(ncoeff);
     msg += " & SNAP ncoeff = " + std::to_string(snap->ncoeff);
     msg += "\n";
     HELPER_LOG_ERROR(msg);
-    return;
+    return true;
   }
 
   // Set up memory for square of cutoff
@@ -791,6 +819,9 @@ int SNAPImplementation::setRefreshMutableValues(ModelObj *const modelObj)
 
   // Update the cutoff value in KIM API object
   modelObj->SetNeighborListPointers(1, &rcutmax, &modelWillNotRequestNeighborsOfNoncontributingParticles_);
+
+  // everything is good
+  return false;
 }
 
 int SNAPImplementation::RegisterKIMFunctions(KIM::ModelDriverCreate *const modelDriverCreate) const
@@ -1171,7 +1202,7 @@ template <bool isComputeProcess_dEdr,
           bool isComputeVirial,
           bool isComputeParticleVirial>
 int SNAPImplementation::Compute(
-    KIM::ModelCompute const *const modelCompute,
+    KIM::ModelCompute const *const /* modelCompute */,
     KIM::ModelComputeArguments const *const modelComputeArguments,
     const int *const particleSpeciesCodes,
     const int *const particleContributing,
@@ -1307,13 +1338,16 @@ int SNAPImplementation::Compute(
     }
 
     // compute Ui, Yi for atom i
-    snap->compute_ui(ninside);
+    {
+      snap->compute_ui(ninside);
 
-    auto betai = beta.data_1D(i);
+      // Get the pointer to the beta array of data for atom i
+      auto betai = beta.data_1D(i);
 
-    double const *const bi = const_cast<double *>(betai.data());
+      double const *const bi = const_cast<double *>(betai.data());
 
-    snap->compute_yi(bi);
+      snap->compute_yi(bi);
+    }
 
     if (isComputeProcess_dEdr || isComputeForces || isComputeVirial || isComputeParticleVirial)
     {
@@ -1506,3 +1540,4 @@ int SNAPImplementation::Compute(
 
 #undef ONE
 #undef MAXLINE
+#undef HELPER_LOG_ERROR
