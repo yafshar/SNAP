@@ -1,19 +1,52 @@
-/* ----------------------------------------------------------------------
-   LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
-   Steve Plimpton, sjplimp@sandia.gov
+//
+// CDDL HEADER START
+//
+// The contents of this file are subject to the terms of the Common Development
+// and Distribution License Version 1.0 (the "License").
+//
+// You can obtain a copy of the license at
+// http://www.opensource.org/licenses/CDDL-1.0.  See the License for the
+// specific language governing permissions and limitations under the License.
+//
+// When distributing Covered Code, include this CDDL HEADER in each file and
+// include the License file in a prominent location with the name LICENSE.CDDL.
+// If applicable, add the following below this CDDL HEADER, with the fields
+// enclosed by brackets "[]" replaced with your own identifying information:
+//
+// Portions Copyright (c) [yyyy] [name of copyright owner]. All rights reserved.
+//
+// CDDL HEADER END
+//
 
-   Copyright (2003) Sandia Corporation.  Under the terms of Contract
-   DE-AC04-94AL85000 with Sandia Corporation, the U.S. Government retains
-   certain rights in this software.  This software is distributed under
-   the GNU General Public License.
+//
+// Copyright (c) 2019, Regents of the University of Minnesota.
+// All rights reserved.
+//
+// Contributors:
+//    Yaser Afshar
+//
 
-   See the README file in the top-level LAMMPS directory.
-------------------------------------------------------------------------- */
 
-/* ----------------------------------------------------------------------
-   Contributing authors: Aidan Thompson, Christian Trott, SNL
-------------------------------------------------------------------------- */
+/*!
+ * \file SNA.cpp
+ * \author Aidan Thompson, Christian Trott, SNL
+ *
+ * \brief This file is amended and adapted by Yaser Afshar (yafshar@umn.edu)
+ * Originally imported from the LAMMPS software package.
+ * LAMMPS stands for Large-scale Atomic/Molecular Massively Parallel Simulator.
+ * http://lammps.sandia.gov, Sandia National Laboratories.
+ *
+ * \date 10-07-2019
+ *
+ * \copyright
+ * \verbatim
+ * Copyright (2003) Sandia Corporation.  Under the terms of Contract
+ * DE-AC04-94AL85000 with Sandia Corporation, the U.S. Government retains
+ * certain rights in this software.  This software is distributed under
+ * the GNU General Public License.
+ * \endverbatim
+ */
+
 
 #include "SNA.hpp"
 
@@ -33,14 +66,14 @@ SNA::SNA(double const rfac0_in,
                                    rmin0(rmin0_in),
                                    rfac0(rfac0_in),
                                    switchflag(switchflag_in),
-                                   wself(1.0),
-                                   bzeroflag(bzeroflag_in)
+                                   bzeroflag(bzeroflag_in),
+                                   wself(1.0)
 {
   ncoeff = compute_ncoeff();
 
   build_indexlist();
 
-  create_arrays();
+  create_twojmax_arrays();
 
   if (bzeroflag)
   {
@@ -982,7 +1015,7 @@ void SNA::compute_duarray(double const dx, double const dy, double const dz,
   }
 }
 
-void SNA::create_arrays()
+void SNA::create_twojmax_arrays()
 {
   rootpqarray.resize(twojmax + 2, twojmax + 2);
 
@@ -1164,3 +1197,4 @@ double SNA::compute_dsfac(double const r, double const rcut)
 }
 
 #undef MY_PI
+#undef HELPER_LOG_ERROR

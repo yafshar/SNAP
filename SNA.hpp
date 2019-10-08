@@ -1,3 +1,32 @@
+//
+// CDDL HEADER START
+//
+// The contents of this file are subject to the terms of the Common Development
+// and Distribution License Version 1.0 (the "License").
+//
+// You can obtain a copy of the license at
+// http://www.opensource.org/licenses/CDDL-1.0.  See the License for the
+// specific language governing permissions and limitations under the License.
+//
+// When distributing Covered Code, include this CDDL HEADER in each file and
+// include the License file in a prominent location with the name LICENSE.CDDL.
+// If applicable, add the following below this CDDL HEADER, with the fields
+// enclosed by brackets "[]" replaced with your own identifying information:
+//
+// Portions Copyright (c) [yyyy] [name of copyright owner]. All rights reserved.
+//
+// CDDL HEADER END
+//
+
+//
+// Copyright (c) 2019, Regents of the University of Minnesota.
+// All rights reserved.
+//
+// Contributors:
+//    Yaser Afshar
+//
+
+
 #ifndef SNA_HPP
 #define SNA_HPP
 
@@ -6,8 +35,8 @@
  * \author Aidan Thompson, Christian Trott, SNL
  *
  * \brief This file is amended and adapted by Yaser Afshar (yafshar@umn.edu)
- * Originally imported from the LAMMPS software package. LAMMPS stands for Large-scale
- * Atomic/Molecular Massively Parallel Simulator.
+ * Originally imported from the LAMMPS software package.
+ * LAMMPS stands for Large-scale Atomic/Molecular Massively Parallel Simulator.
  * http://lammps.sandia.gov, Sandia National Laboratories.
  *
  * \date 10-07-2019
@@ -19,7 +48,6 @@
  * certain rights in this software.  This software is distributed under
  * the GNU General Public License.
  * \endverbatim
- *
  */
 
 #include "helper.hpp"
@@ -271,9 +299,12 @@ private:
   /*!
    * \brief For any positive number n, returns it's factorial
    *
-   * \param n A positive number
+   * \param n A positive integer number
    *
-   * \return double Factorial of a positive number \c n
+   * \return double Factorial of a positive integer number \c n
+   *
+   * \note
+   * Overflow happens if n > 170
    */
   inline double factorial(int const n);
 
@@ -281,7 +312,7 @@ private:
    * \brief Create and allocate data arrays
    *
    */
-  void create_arrays();
+  void create_twojmax_arrays();
 
   /*!
    * \brief Assign Clebsch-Gordan coefficients using the quasi-binomial formula VMK 8.2.1(3)
@@ -407,14 +438,6 @@ private:
   double rfac0;
 
   /*!
-   * \brief Dimensionless weight for the central atom.
-   *
-   * \note
-   * The central atom is arbitrarily assigned a unit weight.
-   */
-  double wself;
-
-  /*!
    * \brief Flag for switching function
    *
    * switchflag value = 0 or 1
@@ -435,6 +458,14 @@ private:
    * 1 = subtract B0
    */
   int bzeroflag;
+
+  /*!
+   * \brief Dimensionless weight for the central atom.
+   *
+   * \note
+   * The central atom is arbitrarily assigned a unit weight.
+   */
+  double wself;
 
   /*! Index counter */
   int idxcg_max;
