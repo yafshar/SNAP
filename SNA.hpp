@@ -62,12 +62,12 @@ struct SNA_ZINDICES
   int j2;
   int j;
 
-  int ma_min;
-  int ma_max;
+  int ma1min;
+  int ma2max;
   int na;
 
-  int mb_min;
-  int mb_max;
+  int mb1min;
+  int mb2max;
   int nb;
 
   int jju;
@@ -201,13 +201,13 @@ public:
   // functions for bispectrum coefficients
 
   /*!
-   * \brief Compute Ui by summing over neighbors j
+   * \brief Compute Ui by summing over \c jnum neighbors
    *
    * Calculates all expansion coefficients for an atom i
    *
-   * \param jnum Number of neighbors
+   * \param nneigh Number of neighbors
    */
-  void compute_ui(int const jnum);
+  void compute_ui(int const nneigh);
 
   /*!
    * \brief Compute Zi by summing over products of Ui
@@ -240,9 +240,9 @@ public:
    * \param rij_in The distance vector between atoms \c i and \c j
    * \param wj_in Dimensionless weights that are chosen to distinguish atoms of different types
    * \param rcut Cutoff distance
-   * \param atom_j Neighbor atom index
+   * \param neigh_j Neighbor index
    */
-  void compute_duidrj(double const *const rij_in, double const wj_in, double const rcut, int const atom_j);
+  void compute_duidrj(double const *const rij_in, double const wj_in, double const rcut, int const neigh_j);
 
   /*!
    * \brief Calculate derivative of Bi w.r.t. atom j
@@ -346,9 +346,9 @@ private:
    * \param r Neighbor atom distnace to the central atom
    * \param wj_in Dimensionless weights that are chosen to distinguish atoms of different types
    * \param rcut Cutoff distance
-   * \param atom_j Neighbor atom index
+   * \param neigh_j Neighbor index
    */
-  void add_uarraytot(double const r, double const wj_in, double const rcut, int const atom_j);
+  void add_uarraytot(double const r, double const wj_in, double const rcut, int const neigh_j);
 
   /*!
    * \brief Compute Wigner U-functions for one neighbor
@@ -358,13 +358,13 @@ private:
    * \param dz
    * \param z0
    * \param r Neighbor atom distnace to the central atom
-   * \param atom_j Neighbor atom index
+   * \param neigh_j Neighbor index
    *
    * Elements of the three-dimensional finite rotation matrix, which are written in terms of
    * Euler angles are called Wigner’s D-functions
    *
    */
-  void compute_uarray(double const dx, double const dy, double const dz, double const z0, double const r, int const atom_j);
+  void compute_uarray(double const dx, double const dy, double const dz, double const z0, double const r, int const neigh_j);
 
   /*!
    * \brief The function delta given by VMK Eq. 8.2(1)
@@ -395,11 +395,11 @@ private:
    * \param dz0dr
    * \param wj_in Dimensionless weights that are chosen to distinguish atoms of different types
    * \param rcut Cutoff distance
-   * \param atom_j
+   * \param neigh_j Neighbor index
    */
   void compute_duarray(double const dx, double const dy, double const dz,
                        double const z0, double const r, double const dz0dr,
-                       double const wj_in, double const rcut, int const atom_j);
+                       double const wj_in, double const rcut, int const neigh_j);
 
 public:
   /*! Band limit for bispectrum components (non-negative integer) */
@@ -517,13 +517,13 @@ private:
   Array2D<double> dulist_r;
   Array2D<double> dulist_i;
 
-  /*! */
+  /*! Index container */
   Array3D<int> idxcg_block;
 
-  /*! */
+  /*! Index container */
   Array3D<int> idxz_block;
 
-  /*! */
+  /*! Index container */
   Array3D<int> idxb_block;
 };
 
