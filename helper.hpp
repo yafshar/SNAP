@@ -34,7 +34,9 @@
  * \file helper.hpp
  *
  * \author Yaser Afshar (yafshar@umn.edu)
+ *
  * \brief This file contains helper classes for memory management
+ * which are STL like extension for multi-dimensional arrays
  *
  * \date 09-10-2019
  */
@@ -64,6 +66,12 @@
        << msg << "\n\n";           \
     std::cerr << ss.str();         \
   }
+
+/*! Type alias for vector of constant dimension 3 */
+using VectorOfSizeDIM = double[3];
+
+/*! Type alias for vector of constant dimension 6 */
+using VectorOfSizeSix = double[6];
 
 /*! \class _Array_Basic The basic STL like container similar to `std::vector` to
  * handle multi-dimensional arrays.
