@@ -27,7 +27,6 @@
 //    Ryan S. Elliott
 //
 
-
 #include "KIM_ModelDriverHeaders.hpp"
 #include "KIM_LogMacros.hpp"
 
@@ -42,6 +41,7 @@
 #include <iostream>
 #include <map>
 #include <algorithm>
+#include <numeric>
 
 #ifdef MAXLINE
 #undef MAXLINE
@@ -68,6 +68,9 @@ SNAPImplementation::SNAPImplementation(
     KIM::TemperatureUnit const requestedTemperatureUnit,
     KIM::TimeUnit const requestedTimeUnit,
     int *const ier) : cachedNumberOfParticles_(0),
+                      numberOfContributingParticles_(0),
+                      modelWillNotRequestNeighborsOfNoncontributingParticles_(1),
+                      influenceDistance_(0),
                       nelements(0),
                       ncoeffall(0),
                       twojmax(0),
@@ -348,9 +351,10 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const modelCompute,
     return ier;
   }
 
-  if (beta_max < cachedNumberOfParticles_)
+  if (beta_max < numberOfContributingParticles_)
   {
-    beta_max = cachedNumberOfParticles_;
+    beta_max = numberOfContributingParticles_;
+
     beta.resize(beta_max, ncoeff);
     bispectrum.resize(beta_max, ncoeff);
   }
@@ -811,14 +815,15 @@ int SNAPImplementation::setRefreshMutableValues(ModelObj *const modelObj)
     }
   }
 
+  influenceDistance_ = rcutmax;
+
   // Update the maximum cutoff or influence distance value in KIM API object
-  modelObj->SetInfluenceDistancePointer(&rcutmax);
+  modelObj->SetInfluenceDistancePointer(&influenceDistance_);
 
   // In this model we do not need to request neighbors from non-contributing particles
-  int const modelWillNotRequestNeighborsOfNoncontributingParticles_(1);
-
+  // modelWillNotRequestNeighborsOfNoncontributingParticles_ = 1
   // Update the cutoff value in KIM API object
-  modelObj->SetNeighborListPointers(1, &rcutmax, &modelWillNotRequestNeighborsOfNoncontributingParticles_);
+  modelObj->SetNeighborListPointers(1, &influenceDistance_, &modelWillNotRequestNeighborsOfNoncontributingParticles_);
 
   // everything is good
   return false;
@@ -830,7 +835,7 @@ int SNAPImplementation::RegisterKIMFunctions(KIM::ModelDriverCreate *const model
   int ier =
       modelDriverCreate->SetRoutinePointer(KIM::MODEL_ROUTINE_NAME::Destroy, KIM::LANGUAGE_NAME::cpp, true, reinterpret_cast<KIM::Function *>(SNAP::Destroy)) ||
       modelDriverCreate->SetRoutinePointer(KIM::MODEL_ROUTINE_NAME::Refresh, KIM::LANGUAGE_NAME::cpp, true, reinterpret_cast<KIM::Function *>(SNAP::Refresh)) ||
-      modelDriverCreate->SetRoutinePointer(KIM::MODEL_ROUTINE_NAME::WriteParameterizedModel, KIM::LANGUAGE_NAME::cpp, true, reinterpret_cast<KIM::Function *>(SNAP::WriteParameterizedModel)) ||
+      modelDriverCreate->SetRoutinePointer(KIM::MODEL_ROUTINE_NAME::WriteParameterizedModel, KIM::LANGUAGE_NAME::cpp, false, reinterpret_cast<KIM::Function *>(SNAP::WriteParameterizedModel)) ||
       modelDriverCreate->SetRoutinePointer(KIM::MODEL_ROUTINE_NAME::Compute, KIM::LANGUAGE_NAME::cpp, true, reinterpret_cast<KIM::Function *>(SNAP::Compute)) ||
       modelDriverCreate->SetRoutinePointer(KIM::MODEL_ROUTINE_NAME::ComputeArgumentsCreate, KIM::LANGUAGE_NAME::cpp, true, reinterpret_cast<KIM::Function *>(SNAP::ComputeArgumentsCreate)) ||
       modelDriverCreate->SetRoutinePointer(KIM::MODEL_ROUTINE_NAME::ComputeArgumentsDestroy, KIM::LANGUAGE_NAME::cpp, true, reinterpret_cast<KIM::Function *>(SNAP::ComputeArgumentsDestroy));
@@ -887,8 +892,11 @@ int SNAPImplementation::setComputeMutableValues(KIM::ModelComputeArguments const
   isComputeVirial = (virial);
   isComputeParticleVirial = (particleVirial);
 
-  // update values
+  // Update values
   cachedNumberOfParticles_ = *numberOfParticles;
+
+  // Get the number of contributing particles
+  numberOfContributingParticles_ = std::accumulate(particleContributing, particleContributing + cachedNumberOfParticles_, 0);
 
   // everything is good
   return false;
@@ -1074,11 +1082,8 @@ void SNAPImplementation::computeBispectrum(KIM::ModelComputeArguments const *con
   int const *n1atom = NULL;
 
   // Setup loop over contributing particles
-  for (int i = 0; i < cachedNumberOfParticles_; ++i)
+  for (int i = 0; i < numberOfContributingParticles_; ++i)
   {
-    if (!particleContributing[i])
-      continue;
-
     // Get neighbors of i
     modelComputeArguments->GetNeighborList(0, i, &numnei, &n1atom);
 
@@ -1140,21 +1145,27 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes,
   // Setup loop over contributing particles
   if (quadraticflag)
   {
-    for (int i = 0; i < cachedNumberOfParticles_; ++i)
+    for (int i = 0; i < numberOfContributingParticles_; ++i)
     {
-      if (!particleContributing[i])
-        continue;
-
       // Get the species index for atom i
       int const iSpecies = particleSpeciesCodes[i];
 
+      // Get the 1D view to the 2D coeffelem array at row iSpecies
       auto coeffi = coeffelem.data_1D(iSpecies);
 
+      // Get the pointer to the raw data + 1 to avoid extra sum
+      double *Ci = coeffi.data() + 1;
+
+      // Get the 1D view to the 2D beta array at row i
       auto bi = beta.data_1D(i);
 
       for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
-        bi[icoeff] = coeffi[icoeff + 1];
+        bi[icoeff] = Ci[icoeff];
 
+      // Get the pointer to the start of coeffi array of data
+      --Ci;
+
+      // Get the 1D view to the 2D bispectrum array at row i
       auto Bi = bispectrum.data_1D(i);
 
       int k = ncoeff + 1;
@@ -1163,32 +1174,34 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes,
       {
         double const bveci = Bi[icoeff];
 
-        bi[icoeff] += coeffi[k++] * bveci;
+        bi[icoeff] += Ci[k++] * bveci;
 
         for (int jcoeff = icoeff + 1; jcoeff < ncoeff; ++jcoeff, ++k)
         {
-          bi[icoeff] += coeffi[k] * Bi[jcoeff];
-          bi[jcoeff] += coeffi[k] * bveci;
+          bi[icoeff] += Ci[k] * Bi[jcoeff];
+          bi[jcoeff] += Ci[k] * bveci;
         }
       }
     }
   }
   else
   {
-    for (int i = 0; i < cachedNumberOfParticles_; ++i)
+    for (int i = 0; i < numberOfContributingParticles_; ++i)
     {
-      if (!particleContributing[i])
-        continue;
-
       // Get the species index for atom i
       int const iSpecies = particleSpeciesCodes[i];
 
+      // Get the 1D view to the 2D coeffelem array at row iSpecies
       auto coeffi = coeffelem.data_1D(iSpecies);
 
+      // Get the pointer to the raw data + 1 to avoid extra sum
+      double *Ci = coeffi.data() + 1;
+
+      // Get the 1D view to the 2D beta array at row i
       auto bi = beta.data_1D(i);
 
       for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
-        bi[icoeff] = coeffi[icoeff + 1];
+        bi[icoeff] = Ci[icoeff];
     }
   }
 }
@@ -1277,15 +1290,9 @@ int SNAPImplementation::Compute(
   int numnei = 0;
   int const *n1atom = NULL;
 
-  // Loop over all particles
-  for (int i = 0; i < cachedNumberOfParticles_; ++i)
+  // Loop over all the contributing particles
+  for (int i = 0; i < numberOfContributingParticles_; ++i)
   {
-    // Get the next particle if it is not a contributing one
-    if (!particleContributing[i])
-      continue;
-
-    // Over contributing particles
-
     // Get the species index for atom i
     int const iSpecies = particleSpeciesCodes[i];
 
@@ -1296,7 +1303,7 @@ int SNAPImplementation::Compute(
     double const yi = coordinates[i][1];
     double const zi = coordinates[i][2];
 
-    // Calculate contribution from pair function
+    // Calculate contribution
 
     // Get the neighbors
     modelComputeArguments->GetNeighborList(0, i, &numnei, &n1atom);
@@ -1341,144 +1348,110 @@ int SNAPImplementation::Compute(
     {
       snap->compute_ui(ninside);
 
-      // Get the pointer to the beta array of data for atom i
+      // Get the 1D view to the 2D beta array at row i
       auto betai = beta.data_1D(i);
 
+      // Get the pointer to the beta array of data for atom i
       double const *const bi = const_cast<double *>(betai.data());
 
       snap->compute_yi(bi);
     }
 
-    if (isComputeProcess_dEdr || isComputeForces || isComputeVirial || isComputeParticleVirial)
+    // Compute contribution to force, etc.
+
+    // For the neighbors of particle i within the cutoff:
+    // Compute deidrj = dEi/dRj = -dEi/dRi add to Fi, subtract from Fj
+
+    VectorOfSizeDIM deidrj;
+
+    // Setup loop over neighbors of particle i
+    for (int n = 0; n < ninside; ++n)
     {
-      // Compute contribution to force, etc.
+      // Get the 1D view to the 2D snap->rij array at row n
+      auto rij = snap->rij.data_1D(n);
 
-      // For the neighbors of particle i within the cutoff:
-      // Compute deidrj = dEi/dRj = -dEi/dRi add to Fi, subtract from Fj
+      // Get the pointer to the rij_const array of data
+      double const *const rij_const = const_cast<double *>(rij.data());
 
-      VectorOfSizeDIM deidrj;
+      snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], n);
 
-      // Setup loop over neighbors of particle i
-      for (int n = 0; n < ninside; ++n)
+      snap->compute_deidrj(deidrj);
+
+      // Index of the neighbor atom
+      int const j = snap->inside[n];
+
+      // Contribution to forces
+      if (isComputeForces)
       {
-        // Index of the neighbor atom
-        int const j = snap->inside[n];
+        forces[i][0] += deidrj[0];
+        forces[i][1] += deidrj[1];
+        forces[i][2] += deidrj[2];
 
-        int const jContrib = particleContributing[j];
+        forces[j][0] -= deidrj[0];
+        forces[j][1] -= deidrj[1];
+        forces[j][2] -= deidrj[2];
+      }
 
-        // Effective half-list
-        if (!(jContrib && (j < i)))
+      if (isComputeProcess_dEdr)
+      {
+        double const rrsq = std::sqrt(rij_const[0] * rij_const[0] + rij_const[1] * rij_const[1] + rij_const[2] * rij_const[2]);
+        double dedr = std::sqrt(deidrj[0] * deidrj[0] + deidrj[1] * deidrj[1] + deidrj[2] * deidrj[2]);
+        if (!particleContributing[j])
+          dedr *= 0.5;
+        ier = modelComputeArguments->ProcessDEDrTerm(dedr, rrsq, rij_const, i, j);
+        if (ier)
         {
-          auto rij = snap->rij.data_1D(n);
+          LOG_ERROR("ProcessDEDrTerm");
+          return ier;
+        }
+      }
 
-          double const *const rij_const = const_cast<double *>(rij.data());
+      if (isComputeVirial || isComputeParticleVirial)
+      {
+        VectorOfSizeSix v;
 
-          double const rrsq = std::sqrt(rij_const[0] * rij_const[0] + rij_const[1] * rij_const[1] + rij_const[2] * rij_const[2]);
+        v[0] = rij_const[0] * deidrj[0];
+        v[1] = rij_const[1] * deidrj[1];
+        v[2] = rij_const[2] * deidrj[2];
+        v[3] = rij_const[0] * deidrj[1];
+        v[4] = rij_const[0] * deidrj[2];
+        v[5] = rij_const[1] * deidrj[2];
 
-          snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], j);
+        if (isComputeVirial)
+        {
+          virial[0] += v[0];
+          virial[1] += v[1];
+          virial[2] += v[2];
+          virial[3] += v[3];
+          virial[4] += v[4];
+          virial[5] += v[5];
+        }
 
-          snap->compute_deidrj(deidrj);
+        if (isComputeParticleVirial)
+        {
+          v[0] *= 0.5;
+          v[1] *= 0.5;
+          v[2] *= 0.5;
+          v[3] *= 0.5;
+          v[4] *= 0.5;
+          v[5] *= 0.5;
 
-          double dedr = std::sqrt(deidrj[0] * deidrj[0] + deidrj[1] * deidrj[1] + deidrj[2] * deidrj[2]);
+          particleVirial[i][0] += v[0];
+          particleVirial[i][1] += v[1];
+          particleVirial[i][2] += v[2];
+          particleVirial[i][3] += v[3];
+          particleVirial[i][4] += v[4];
+          particleVirial[i][5] += v[5];
 
-          if (!jContrib)
-            dedr *= 0.5;
-
-          // Contribution to forces
-          if (isComputeForces)
-          {
-            if (jContrib)
-            {
-              forces[i][0] += deidrj[0];
-              forces[i][1] += deidrj[1];
-              forces[i][2] += deidrj[2];
-
-              forces[j][0] -= deidrj[0];
-              forces[j][1] -= deidrj[1];
-              forces[j][2] -= deidrj[2];
-            }
-            else
-            {
-              forces[i][0] += rij_const[0] * dedr / rrsq;
-              forces[i][1] += rij_const[1] * dedr / rrsq;
-              forces[i][2] += rij_const[2] * dedr / rrsq;
-
-              forces[j][0] -= rij_const[0] * dedr / rrsq;
-              forces[j][1] -= rij_const[1] * dedr / rrsq;
-              forces[j][2] -= rij_const[2] * dedr / rrsq;
-            }
-          } // isComputeForces
-
-          if (isComputeProcess_dEdr)
-          {
-            ier = modelComputeArguments->ProcessDEDrTerm(dedr, rrsq, rij_const, i, j);
-            if (ier)
-            {
-              LOG_ERROR("ProcessDEDrTerm");
-              return ier;
-            }
-          } // isComputeProcess_dEdr
-
-          if (isComputeVirial || isComputeParticleVirial)
-          {
-            VectorOfSizeSix v;
-
-            if (jContrib)
-            {
-              v[0] = rij_const[0] * deidrj[0];
-              v[1] = rij_const[1] * deidrj[1];
-              v[2] = rij_const[2] * deidrj[2];
-              v[3] = rij_const[0] * deidrj[1];
-              v[4] = rij_const[0] * deidrj[2];
-              v[5] = rij_const[1] * deidrj[2];
-            }
-            else
-            {
-              v[0] = rij_const[0] * rij_const[0] * dedr / rrsq;
-              v[1] = rij_const[1] * rij_const[1] * dedr / rrsq;
-              v[2] = rij_const[2] * rij_const[2] * dedr / rrsq;
-              v[3] = rij_const[0] * rij_const[1] * dedr / rrsq;
-              v[4] = rij_const[0] * rij_const[2] * dedr / rrsq;
-              v[5] = rij_const[1] * rij_const[2] * dedr / rrsq;
-            }
-
-            if (isComputeVirial)
-            {
-              virial[0] += v[0];
-              virial[1] += v[1];
-              virial[2] += v[2];
-              virial[3] += v[3];
-              virial[4] += v[4];
-              virial[5] += v[5];
-            }
-
-            if (isComputeParticleVirial)
-            {
-              v[0] *= 0.5;
-              v[1] *= 0.5;
-              v[2] *= 0.5;
-              v[3] *= 0.5;
-              v[4] *= 0.5;
-              v[5] *= 0.5;
-
-              particleVirial[i][0] += v[0];
-              particleVirial[i][1] += v[1];
-              particleVirial[i][2] += v[2];
-              particleVirial[i][3] += v[3];
-              particleVirial[i][4] += v[4];
-              particleVirial[i][5] += v[5];
-
-              particleVirial[j][0] += v[0];
-              particleVirial[j][1] += v[1];
-              particleVirial[j][2] += v[2];
-              particleVirial[j][3] += v[3];
-              particleVirial[j][4] += v[4];
-              particleVirial[j][5] += v[5];
-            } // isComputeParticleVirial
-          }   // isComputeVirial || isComputeParticleVirial
-        }     // Effective half-list
-      }       // End of loop over neighbors of particle i
-    }         // isComputeProcess_dEdr || isComputeForces || isComputeVirial || isComputeParticleVirial
+          particleVirial[j][0] += v[0];
+          particleVirial[j][1] += v[1];
+          particleVirial[j][2] += v[2];
+          particleVirial[j][3] += v[3];
+          particleVirial[j][4] += v[4];
+          particleVirial[j][5] += v[5];
+        } // isComputeParticleVirial
+      }   // isComputeVirial || isComputeParticleVirial
+    }     // End of loop over neighbors of particle i
 
     // Energy contribution
     if (isComputeEnergy || isComputeParticleEnergy)
@@ -1486,35 +1459,45 @@ int SNAPImplementation::Compute(
       // Compute contribution to energy.
 
       // Energy of particle i, sum over coeffs_k * Bi_k
-      auto coeffi = coeffelem.data_1D(iSpecies);
 
-      // Get the bispectrum of particle i
-      auto Bi = bispectrum.data_1D(i);
+      // Get the 1D view to the 2D coeffelem array at row iSpecies
+      auto coeffi = coeffelem.data_1D(iSpecies);
 
       // Compute phi
       double phi = coeffi[0];
+
+      // Get the pointer to the raw data + 1 to avoid extra sum
+      double *Ci = coeffi.data() + 1;
+
+      // Get the bispectrum of particle i
+      // Get the 1D view to the 2D bispectrum array at row i
+      auto Bi = bispectrum.data_1D(i);
 
       // E = beta.B + 0.5*B^t.alpha.B
 
       // Linear contributions
       for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
-        phi += coeffi[icoeff + 1] * Bi[icoeff];
+        phi += Ci[icoeff] * Bi[icoeff];
 
       // Quadratic contributions
       if (quadraticflag)
       {
+        // Get the pointer to the start of coeffi array of data
+        --Ci;
+
         int k = ncoeff + 1;
+
         for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
         {
           double const bveci = Bi[icoeff];
 
-          phi += 0.5 * coeffi[k++] * bveci * bveci;
+          phi += 0.5 * Ci[k++] * bveci * bveci;
 
           for (int jcoeff = icoeff + 1; jcoeff < ncoeff; ++jcoeff, ++k)
           {
             double const bvecj = Bi[jcoeff];
 
-            phi += coeffi[k] * bveci * bvecj;
+            phi += Ci[k] * bveci * bvecj;
           }
         }
       } // quadraticflag
@@ -1531,7 +1514,7 @@ int SNAPImplementation::Compute(
         particleEnergy[i] += phi;
       }
     } // isComputeEnergy || isComputeParticleEnergy
-  }   // End of loop over all particles
+  }   // End of loop over contributing particles
 
   // everything is good
   return false;

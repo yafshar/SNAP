@@ -50,12 +50,6 @@
  */
 #define NUM_PARAMETER_FILES 2
 
-/*! Type alias for vector of constant dimension 3 */
-using VectorOfSizeDIM = double[3];
-
-/*! Type alias for vector of constant dimension 6 */
-using VectorOfSizeSix = double[6];
-
 /*! \class SNAPImplementation
  * \brief SNAP model driver Implementation class
  *
@@ -386,6 +380,30 @@ private:
    * This is a Mutable value that can change with each call to \b Refresh() and \b Compute().
    */
   int cachedNumberOfParticles_;
+
+  /*!
+   * \brief Number of contributing particles
+   *
+   * \note
+   * This is a Mutable value that can change with each call to \b Refresh() and \b Compute().
+   */
+  int numberOfContributingParticles_;
+
+  /*!
+   * \brief Flag indicating if we need to request neighbors from non-contributing particles
+   *
+   * \note
+   * This is a Mutable value that can change with each call to \b Refresh() and \b Compute().
+   */
+  int modelWillNotRequestNeighborsOfNoncontributingParticles_;
+
+  /*!
+   * \brief Cutoff value in %KIM API object
+   *
+   * \note
+   * This is a Mutable value that can change with each call to \b Refresh() and \b Compute().
+   */
+  double influenceDistance_;
 
   /*! Number of unique elements */
   int nelements;
