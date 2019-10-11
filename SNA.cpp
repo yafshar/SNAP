@@ -223,14 +223,15 @@ void SNA::build_indexlist()
 void SNA::init()
 {
   init_clebsch_gordan();
-
   init_rootpqarray();
 }
 
-void SNA::grow_rij(int const newnmax)
+void SNA::grow_rij(int newnmax)
 {
   if (newnmax <= (int)rcutij.size())
+  {
     return;
+  }
 
   rij.resize(newnmax, 3);
   inside.resize(newnmax);
@@ -729,15 +730,8 @@ void SNA::compute_duidrj(double const *const rij_in, double const wj_in, double 
 
 void SNA::zero_uarraytot()
 {
-  for (int j = 0; j <= twojmax; ++j)
-  {
-    int jju = idxu_block[j];
-    for (int ma_mb = 0; ma_mb <= (j + 1) * (j + 1); ++ma_mb, ++jju)
-    {
-      ulisttot_r[jju] = 0.0;
-      ulisttot_i[jju] = 0.0;
-    }
-  }
+  std::for_each(ulisttot_r.begin(), ulisttot_r.end(), [](double &u) { u = 0.0; });
+  std::for_each(ulisttot_i.begin(), ulisttot_i.end(), [](double &u) { u = 0.0; });
 }
 
 void SNA::addself_uarraytot(double const wself_in)
@@ -758,20 +752,20 @@ void SNA::add_uarraytot(double const r, double const wj_in, double const rcut, i
 {
   double const sfac = compute_sfac(r, rcut) * wj_in;
 
-  auto ulist_r = ulist_r_ij.data_1D(neigh_j);
-  auto ulist_i = ulist_i_ij.data_1D(neigh_j);
+  double *ulist_r = ulist_r_ij.data_1D(neigh_j).data();
+  double *ulist_i = ulist_i_ij.data_1D(neigh_j).data();
 
   for (int j = 0; j <= twojmax; ++j)
   {
     int const jju_b = idxu_block[j];
     int const jju_e = jju_b + (j + 1) * (j + 1);
 
-    for (int m = jju_b; m <= jju_e; ++m)
+    for (int m = jju_b; m < jju_e; ++m)
     {
       ulisttot_r[m] += sfac * ulist_r[m];
     }
 
-    for (int m = jju_b; m <= jju_e; ++m)
+    for (int m = jju_b; m < jju_e; ++m)
     {
       ulisttot_i[m] += sfac * ulist_i[m];
     }
@@ -799,19 +793,19 @@ void SNA::compute_uarray(double const dx, double const dy, double const dz, doub
 
   double rootpq;
 
-  for (int j = 1; j <= twojmax; j++)
+  for (int j = 1; j <= twojmax; ++j)
   {
     int jju = idxu_block[j];
     int jjup = idxu_block[j - 1];
 
     // Fill in left side of matrix layer from previous layer
 
-    for (int mb = 0; 2 * mb <= j; mb++)
+    for (int mb = 0; 2 * mb <= j; ++mb, ++jju)
     {
       ulist_r[jju] = 0.0;
       ulist_i[jju] = 0.0;
 
-      for (int ma = 0; ma < j; ++ma, ++jju, ++jjup)
+      for (int ma = 0; ma < j; ++ma, ++jjup)
       {
         rootpq = rootpqarray(j - ma, j - mb);
 
@@ -820,8 +814,10 @@ void SNA::compute_uarray(double const dx, double const dy, double const dz, doub
 
         rootpq = rootpqarray(ma + 1, j - mb);
 
-        ulist_r[jju + 1] = -rootpq * (b_r * ulist_r[jjup] + b_i * ulist_i[jjup]);
-        ulist_i[jju + 1] = -rootpq * (b_r * ulist_i[jjup] - b_i * ulist_r[jjup]);
+        ++jju;
+
+        ulist_r[jju] = -rootpq * (b_r * ulist_r[jjup] + b_i * ulist_i[jjup]);
+        ulist_i[jju] = -rootpq * (b_r * ulist_i[jjup] - b_i * ulist_r[jjup]);
       }
     }
 
@@ -851,7 +847,6 @@ void SNA::compute_uarray(double const dx, double const dy, double const dz, doub
     }
   }
 }
-
 void SNA::compute_duarray(double const dx, double const dy, double const dz,
                           double const z0, double const r, double const dz0dr,
                           double const wj_in, double const rcut, int const neigh_j)
