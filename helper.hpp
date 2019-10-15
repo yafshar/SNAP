@@ -26,7 +26,6 @@
 //    Yaser Afshar
 //
 
-
 #ifndef SNAP_HELPER_HPP
 #define SNAP_HELPER_HPP
 
@@ -46,6 +45,7 @@
 #include <sstream>
 #include <vector>
 #include <algorithm>
+#include <chrono>
 
 #ifdef HELPER_LOG_ERROR
 #undef HELPER_LOG_ERROR
