@@ -408,7 +408,7 @@ public:
   /*! Number of coefficients*/
   int ncoeff;
 
-  /*! Displacements between atom I and it's neighbors */
+  /*! Vector of displacements between atom I and it's neighbors */
   Array2D<double> rij;
 
   /*! Indices of neighbors of atom I within cutoff */
@@ -491,29 +491,29 @@ private:
   /*! The Clebsch–Gordan coupling coefficients */
   std::vector<double> cglist;
 
-  /*! */
+  /*! U total list arrays */
   std::vector<double> ulisttot_r;
   std::vector<double> ulisttot_i;
 
-  /*! */
+  /*! U total list maximum index */
   std::vector<int> idxu_block;
 
   /*! Coefficient list for the angular part of the density function */
   std::vector<double> ylist_r;
   std::vector<double> ylist_i;
 
-  /*! */
+  /*! Z list arrays */
   std::vector<double> zlist_r;
   std::vector<double> zlist_i;
 
-  /*! */
+  /*! U list arrays */
   Array2D<double> ulist_r_ij;
   Array2D<double> ulist_i_ij;
 
-  /*! */
+  /*! Square root of p, and q indices */
   Array2D<double> rootpqarray;
 
-  /*! */
+  /*! Derivatives of u list arrays */
   Array2D<double> dulist_r;
   Array2D<double> dulist_i;
 

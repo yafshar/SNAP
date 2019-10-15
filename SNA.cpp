@@ -237,8 +237,9 @@ void SNA::grow_rij(int newnmax)
   inside.resize(newnmax);
   wj.resize(newnmax);
   rcutij.resize(newnmax);
-  ulist_r_ij.resize(newnmax, idxu_max);
-  ulist_i_ij.resize(newnmax, idxu_max);
+
+  ulist_r_ij.resize(newnmax, idxu_max, 0.0);
+  ulist_i_ij.resize(newnmax, idxu_max, 0.0);
 }
 
 void SNA::compute_ui(int const jnum)
@@ -288,6 +289,7 @@ void SNA::compute_zi()
 
     int jju1 = idxu_block[j1] + (j1 + 1) * mb1min;
     int jju2 = idxu_block[j2] + (j2 + 1) * mb2max;
+
     int icgb = mb1min * (j2 + 1) + mb2max;
 
     for (int ib = 0; ib < nb; ++ib)
@@ -1037,15 +1039,15 @@ void SNA::compute_duarray(double const dx, double const dy, double const dz,
 
 void SNA::create_twojmax_arrays()
 {
-  rootpqarray.resize(twojmax + 2, twojmax + 2);
+  rootpqarray.resize(twojmax + 2, twojmax + 2, 0.0);
 
-  cglist.resize(idxcg_max);
+  cglist.resize(idxcg_max, 0.0);
 
-  ulisttot_r.resize(idxu_max);
-  ulisttot_i.resize(idxu_max);
+  ulisttot_r.resize(idxu_max, 0.0);
+  ulisttot_i.resize(idxu_max, 0.0);
 
-  dulist_r.resize(idxu_max, 3);
-  dulist_i.resize(idxu_max, 3);
+  dulist_r.resize(idxu_max, 3, 0.0);
+  dulist_i.resize(idxu_max, 3, 0.0);
 
   zlist_r.resize(idxz_max);
   zlist_i.resize(idxz_max);
@@ -1054,8 +1056,8 @@ void SNA::create_twojmax_arrays()
 
   dblist.resize(idxb_max, 3);
 
-  ylist_r.resize(idxu_max);
-  ylist_i.resize(idxu_max);
+  ylist_r.resize(idxu_max, 0.0);
+  ylist_i.resize(idxu_max, 0.0);
 
   if (bzeroflag)
   {
