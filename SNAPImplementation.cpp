@@ -1082,8 +1082,11 @@ void SNAPImplementation::computeBispectrum(KIM::ModelComputeArguments const *con
   int const *n1atom = NULL;
 
   // Setup loop over contributing particles
-  for (int i = 0; i < numberOfContributingParticles_; ++i)
+  for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
   {
+    if (!particleContributing[i])
+      continue;
+
     // Get neighbors of i
     modelComputeArguments->GetNeighborList(0, i, &numnei, &n1atom);
 
@@ -1133,20 +1136,22 @@ void SNAPImplementation::computeBispectrum(KIM::ModelComputeArguments const *con
 
     snap->compute_bi();
 
-    auto Bi = bispectrum.data_1D(i);
+    auto Bi = bispectrum.data_1D(contributing_index++);
     for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
       Bi[icoeff] = snap->blist[icoeff];
   }
 }
 
-void SNAPImplementation::computeBeta(int const *particleSpeciesCodes,
-                                     int const *particleContributing)
+void SNAPImplementation::computeBeta(int const *particleSpeciesCodes, int const *particleContributing)
 {
   // Setup loop over contributing particles
   if (quadraticflag)
   {
-    for (int i = 0; i < numberOfContributingParticles_; ++i)
+    for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
     {
+      if (!particleContributing[i])
+        continue;
+
       // Get the species index for atom i
       int const iSpecies = particleSpeciesCodes[i];
 
@@ -1157,7 +1162,7 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes,
       double *Ci = coeffi.data() + 1;
 
       // Get the 1D view to the 2D beta array at row i
-      auto bi = beta.data_1D(i);
+      auto bi = beta.data_1D(contributing_index);
 
       for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
         bi[icoeff] = Ci[icoeff];
@@ -1166,7 +1171,7 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes,
       --Ci;
 
       // Get the 1D view to the 2D bispectrum array at row i
-      auto Bi = bispectrum.data_1D(i);
+      auto Bi = bispectrum.data_1D(contributing_index++);
 
       int k = ncoeff + 1;
 
@@ -1186,8 +1191,11 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes,
   }
   else
   {
-    for (int i = 0; i < numberOfContributingParticles_; ++i)
+    for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
     {
+      if (!particleContributing[i])
+        continue;
+
       // Get the species index for atom i
       int const iSpecies = particleSpeciesCodes[i];
 
@@ -1198,7 +1206,7 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes,
       double *Ci = coeffi.data() + 1;
 
       // Get the 1D view to the 2D beta array at row i
-      auto bi = beta.data_1D(i);
+      auto bi = beta.data_1D(contributing_index++);
 
       for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
         bi[icoeff] = Ci[icoeff];
@@ -1214,17 +1222,16 @@ template <bool isComputeProcess_dEdr,
           bool isComputeParticleEnergy,
           bool isComputeVirial,
           bool isComputeParticleVirial>
-int SNAPImplementation::Compute(
-    KIM::ModelCompute const *const /* modelCompute */,
-    KIM::ModelComputeArguments const *const modelComputeArguments,
-    const int *const particleSpeciesCodes,
-    const int *const particleContributing,
-    const VectorOfSizeDIM *const coordinates,
-    double *const energy,
-    VectorOfSizeDIM *const forces,
-    double *const particleEnergy,
-    VectorOfSizeSix virial,
-    VectorOfSizeSix *const particleVirial) const
+int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute */,
+                                KIM::ModelComputeArguments const *const modelComputeArguments,
+                                int const *const particleSpeciesCodes,
+                                int const *const particleContributing,
+                                const VectorOfSizeDIM *const coordinates,
+                                double *const energy,
+                                VectorOfSizeDIM *const forces,
+                                double *const particleEnergy,
+                                VectorOfSizeSix virial,
+                                VectorOfSizeSix *const particleVirial) const
 {
   // Everything is good
   int ier = false;
@@ -1291,8 +1298,11 @@ int SNAPImplementation::Compute(
   int const *n1atom = NULL;
 
   // Loop over all the contributing particles
-  for (int i = 0; i < numberOfContributingParticles_; ++i)
+  for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
   {
+    if (!particleContributing[i])
+      continue;
+
     // Get the species index for atom i
     int const iSpecies = particleSpeciesCodes[i];
 
@@ -1349,7 +1359,7 @@ int SNAPImplementation::Compute(
       snap->compute_ui(ninside);
 
       // Get the 1D view to the 2D beta array at row i
-      auto betai = beta.data_1D(i);
+      auto betai = beta.data_1D(contributing_index);
 
       // Get the pointer to the beta array of data for atom i
       double const *const bi = const_cast<double *>(betai.data());
@@ -1466,12 +1476,12 @@ int SNAPImplementation::Compute(
       // Compute phi
       double phi = coeffi[0];
 
-      // Get the pointer to the raw data + 1 to avoid extra sum
+      // Get the pointer to the raw data + 1 to avoid extra summation
       double *Ci = coeffi.data() + 1;
 
       // Get the bispectrum of particle i
       // Get the 1D view to the 2D bispectrum array at row i
-      auto Bi = bispectrum.data_1D(i);
+      auto Bi = bispectrum.data_1D(contributing_index);
 
       // E = beta.B + 0.5*B^t.alpha.B
 
@@ -1493,11 +1503,11 @@ int SNAPImplementation::Compute(
 
           phi += 0.5 * Ci[k++] * bveci * bveci;
 
-          for (int jcoeff = icoeff + 1; jcoeff < ncoeff; ++jcoeff, ++k)
+          for (int jcoeff = icoeff + 1; jcoeff < ncoeff; ++jcoeff)
           {
             double const bvecj = Bi[jcoeff];
 
-            phi += Ci[k] * bveci * bvecj;
+            phi += Ci[k++] * bveci * bvecj;
           }
         }
       } // quadraticflag
@@ -1514,7 +1524,10 @@ int SNAPImplementation::Compute(
         particleEnergy[i] += phi;
       }
     } // isComputeEnergy || isComputeParticleEnergy
-  }   // End of loop over contributing particles
+
+    ++contributing_index;
+
+  } // End of loop over contributing particles
 
   // everything is good
   return false;

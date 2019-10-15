@@ -27,7 +27,6 @@
 //    Ryan S. Elliott
 //
 
-
 #ifndef SNAP_IMPLEMENTATION_HPP
 #define SNAP_IMPLEMENTATION_HPP
 
@@ -52,7 +51,6 @@
 
 /*! \class SNAPImplementation
  * \brief SNAP model driver Implementation class
- *
  */
 class SNAPImplementation
 {
@@ -202,15 +200,15 @@ private:
    * \brief Set the Compute Mutable Values object
    *
    * \param modelComputeArguments A %KIM API ComputeArguments object
-   * \param isComputeProcess_dEdr
-   * \param isComputeProcess_d2Edr2
-   * \param isComputeEnergy
-   * \param isComputeForces
-   * \param isComputeParticleEnergy
-   * \param isComputeVirial
-   * \param isComputeParticleVirial
+   * \param isComputeProcess_dEdr ComputeProcess_dEdr flag
+   * \param isComputeProcess_d2Edr2 ComputeProcess_d2Edr2 flag
+   * \param isComputeEnergy ComputeEnergy flag
+   * \param isComputeForces ComputeForces flag
+   * \param isComputeParticleEnergy ComputeParticleEnergy flag
+   * \param isComputeVirial ComputeVirial flag
+   * \param isComputeParticleVirial ComputeParticleVirial flag
    * \param particleSpeciesCodes Particle species code
-   * \param particleContributing
+   * \param particleContributing Particle contirubuting flag list
    * \param coordinates Particles' coordinates
    * \param energy System energy
    * \param forces Particles' forces
@@ -240,15 +238,15 @@ private:
   /*!
    * \brief Get the Compute Index
    *
-   * \param isComputeProcess_dEdr
-   * \param isComputeProcess_d2Edr2
-   * \param isComputeEnergy
-   * \param isComputeForces
-   * \param isComputeParticleEnergy
-   * \param isComputeVirial
-   * \param isComputeParticleVirial
+   * \param isComputeProcess_dEdr ComputeProcess_dEdr flag
+   * \param isComputeProcess_d2Edr2 ComputeProcess_d2Edr2 flag
+   * \param isComputeEnergy ComputeEnergy flag
+   * \param isComputeForces ComputeForces flag
+   * \param isComputeParticleEnergy ComputeParticleEnergy flag
+   * \param isComputeVirial ComputeVirial flag
+   * \param isComputeParticleVirial ComputeParticleVirial flag
    *
-   * \return int the Compute Index
+   * \return int The computed Index
    */
   int getComputeIndex(bool const isComputeProcess_dEdr,
                       bool const isComputeProcess_d2Edr2,
@@ -310,9 +308,9 @@ private:
   /*!
    * \brief Compute the bispectrum component of each atom
    *
-   * \param modelComputeArguments
-   * \param particleSpeciesCodes The KIM \c particleSpeciesCodes argument.
-   * \param particleContributing The KIM \c particleContributing argument.
+   * \param modelComputeArguments The %KIM API compute argument object
+   * \param particleSpeciesCodes The array of particle species code
+   * \param particleContributing The array of particle contributing
    * \param coordinates The KIM \c coordinates argument (atoms' coordinates)
    */
   void computeBispectrum(KIM::ModelComputeArguments const *const modelComputeArguments,
@@ -324,22 +322,21 @@ private:
    * \brief Compute the linear coefficient corresponding to
    * the bispectrum component of each atom
    *
-   * \param particleSpeciesCodes The KIM \c particleSpeciesCodes argument.
-   * \param particleContributing The KIM \c particleContributing argument.
+   * \param particleSpeciesCodes The array of particle species code
+   * \param particleContributing The array of particle contributing
    */
-  void computeBeta(int const *particleSpeciesCodes,
-                   int const *particleContributing);
+  void computeBeta(int const *particleSpeciesCodes, int const *particleContributing);
 
   /*!
    * \brief Main compute routine
    *
-   * \tparam isComputeProcess_dEdr
-   * \tparam isComputeProcess_d2Edr2
-   * \tparam isComputeEnergy
-   * \tparam isComputeForces
-   * \tparam isComputeParticleEnergy
-   * \tparam isComputeVirial
-   * \tparam isComputeParticleVirial
+   * \tparam isComputeProcess_dEdr ComputeProcess_dEdr flag
+   * \tparam isComputeProcess_d2Edr2ComputeProcess_d2Edr2 flag
+   * \tparam isComputeEnergy ComputeEnergy flag
+   * \tparam isComputeForces ComputeForces flag
+   * \tparam isComputeParticleEnergy ComputeParticleEnergy flag
+   * \tparam isComputeVirial ComputeVirial flag
+   * \tparam isComputeParticleVirial ComputeParticleVirial flag
    *
    * \param modelCompute A %KIM API Model object
    * \param modelComputeArguments A %KIM API ComputeArguments object
@@ -363,8 +360,8 @@ private:
             bool isComputeParticleVirial>
   int Compute(KIM::ModelCompute const *const modelCompute,
               KIM::ModelComputeArguments const *const modelComputeArguments,
-              const int *const particleSpeciesCodes,
-              const int *const particleContributing,
+              int const *const particleSpeciesCodes,
+              int const *const particleContributing,
               const VectorOfSizeDIM *const coordinates,
               double *const energy,
               VectorOfSizeDIM *const forces,
