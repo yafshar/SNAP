@@ -51,7 +51,7 @@ endif()
 # This model driver requires C++11
 set(CMAKE_CXX_STANDARD 11)
 
-set(MODEL_DRIVER_NAME "SNAP__MD_000000123456_000")
+set(MODEL_DRIVER_NAME "SNAP__MD_536750310735_000")
 
 add_kim_api_model_driver_library(
   NAME                    ${MODEL_DRIVER_NAME}
