@@ -1,24 +1,27 @@
 #!/bin/sh
-#
 
 #
-# CDDL HEADER START
+# CreateDispatch.sh
 #
-# The contents of this file are subject to the terms of the Common Development
-# and Distribution License Version 1.0 (the "License").
+# LGPL Version 2.1 HEADER START
 #
-# You can obtain a copy of the license at
-# http://www.opensource.org/licenses/CDDL-1.0.  See the License for the
-# specific language governing permissions and limitations under the License.
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
 #
-# When distributing Covered Code, include this CDDL HEADER in each file and
-# include the License file in a prominent location with the name LICENSE.CDDL.
-# If applicable, add the following below this CDDL HEADER, with the fields
-# enclosed by brackets "[]" replaced with your own identifying information:
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
 #
-# Portions Copyright (c) [yyyy] [name of copyright owner]. All rights reserved.
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
 #
-# CDDL HEADER END
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+# MA 02110-1301  USA
+#
+# LGPL Version 2.1 HEADER END
 #
 
 #
