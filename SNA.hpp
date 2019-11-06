@@ -55,6 +55,8 @@
 
 #include "helper.hpp"
 
+#include <vector>
+
 /*!
  * \brief Helper indices to be used by the SNA object
  *

@@ -45,12 +45,15 @@
  * \date 09-10-2019
  */
 
+#include <cstddef>
+#include <cstdlib>
 
 #include <iostream>
 #include <string>
 #include <sstream>
 #include <vector>
 #include <algorithm>
+#include <utility>
 
 #ifdef HELPER_LOG_ERROR
 #undef HELPER_LOG_ERROR

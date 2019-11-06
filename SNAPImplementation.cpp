@@ -38,15 +38,19 @@
 #include "SNAP.hpp"
 #include "SNAPImplementation.hpp"
 
-#include <cstdio>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+#include <string>
+#include <iomanip>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <algorithm>
 #include <numeric>
+#include <limits>
 
 #ifdef MAXLINE
 #undef MAXLINE

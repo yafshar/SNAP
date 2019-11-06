@@ -54,6 +54,8 @@
 
 #include <cmath>
 
+#include <algorithm>
+
 #ifdef MY_PI
 #undef MY_PI
 #endif

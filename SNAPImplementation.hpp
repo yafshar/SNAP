@@ -40,6 +40,9 @@
 #include "helper.hpp"
 #include "SNA.hpp"
 
+#include <cstdio>
+
+#include <string>
 #include <vector>
 #include <memory>
 
