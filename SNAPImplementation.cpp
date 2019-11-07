@@ -1427,14 +1427,17 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
 
       if (isComputeVirial || isComputeParticleVirial)
       {
+        // Virial has 6 components and is stored as a 6-element
+        // vector in the following order: xx, yy, zz, yz, xz, xy.
+
         VectorOfSizeSix v;
 
         v[0] = rij_const[0] * deidrj[0];
         v[1] = rij_const[1] * deidrj[1];
         v[2] = rij_const[2] * deidrj[2];
-        v[3] = rij_const[0] * deidrj[1];
+        v[3] = rij_const[1] * deidrj[2];
         v[4] = rij_const[0] * deidrj[2];
-        v[5] = rij_const[1] * deidrj[2];
+        v[5] = rij_const[0] * deidrj[1];
 
         if (isComputeVirial)
         {
