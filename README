@@ -60,8 +60,92 @@ The format of the SNAP parameter file is as follows:
 * The required keywords are rcutfac and twojmax.
 * Optional keywords are rfac0, rmin0, switchflag, bzeroflag, and quadraticflag.
 
+
+------------------------------  Hybrid style  -------------------------------
+
+SNAP can be used in a hybrid style and in combination with a
+Ziegler-Biersack-Littmark (ZBL)[2] screened nuclear repulsion potential and
+any other two-body interaction in the table style[3] representation.
+
+The format of the HYBRID parameter file is as follows:
+
+* HYBRID style parameters (extra 'zbl' and two-body pair styles
+* as a table style can be assigned)
+*
+* NOTE:
+*   No mixing rule will be used here.
+*
+*   Each pair (I,J) or (J,I) can be assigned to one style
+*   If you specify the same pair for the second time, it wipes
+*   out all the previous assignments of that pair and the
+*   second one will be calculated for the two interacting atoms
+*   of those types.
+
+
+* Number of elements for the hybrid style
+   - N
+* Number of elements names, (atom names)
+   - Element_1 Element_2 ... Element_N
+
+* In the ZBL style, the inner and outer cutoff are the
+* same for all pairs of atom types.
+   - zbl  inner  outer
+*
+   - Element_1  Element_2  zbl  Z_1  Z_2
+
+
+* Table style:
+   - table  style  N
+
+* style = 'lookup' or 'linear' or 'spline' or 'bitmap' =
+* method of interpolation
+* N     = use N values in 'lookup', 'linear', 'spline' tables
+* N     = use 2^N values in 'bitmap' tables
+*
+
+   - Element_1  Element_2  table  style_number  filename  keyword  [cutoff]
+
+* 'table' style can be used multiple times. For example, interactions between
+* I and I atoms use a 'linear' table style and interactions between I and J
+* atoms use a 'spline' table style, then you should list the table style two
+* times. Style indexing starts from '1'. It means, that the fisrt style is
+* numbered '1' and the second '2' and so on so forth.
+* Later in the pair interactions, the 'table' style must be added after the
+* I,J atom names followed by the style number and then followed by the
+* remaining coefficients as of 'filename', and 'keyword', and 'cutoff'.
+*
+* The 'filename' specifies a file containing tabulated energy
+* and force values.
+* The 'keyword' specifies a section of the file.
+* The 'cutoff' is an optional coefficient in distance unit.
+*
+*
+* Example 1, we use 2 styles
+* table  linear  1000
+* table  spline  10000
+* I  I  table  1  II.table IIKey 4.0
+* I  J  table  2  IJ.table IJ
+*
+*
+* Example 2, we use one style
+* table  spline  10000
+* I  I  table  1  II.table IIKey 4.0
+* I  J  table  1  IJ.table IJ
+*
+*
+* Example 3, we use one style and have one tabulated file
+* table  spline  10000
+* I  I  table  1  tablefile.txt II 4.0
+* I  J  table  1  tablefile.txt IJ 4.8
+
+
 References:
 
 1. Thompson, Swiler, Trott, Foiles, Tucker, "Spectral neighbor analysis method
 for automated generation of quantum-accurate interatomic potentials," J Comp
 Phys, 285, 316 (2015).
+
+2. J.F. Ziegler, J. P. Biersack and U. Littmark, “The Stopping and Range of
+Ions in Matter,” Volume 1, Pergamon, 1985.
+
+3. https://lammps.sandia.gov/doc/pair_table.html
