@@ -1200,7 +1200,8 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
           int const sn = tableStyleNumber - 1;
           int const nt = nTables++;
 
-          tables[nt] = std::move(TABLE(tables_info[sn].tableStyle, tables_info[sn].tableLength));
+          TABLE tt(tables_info[sn].tableStyle, tables_info[sn].tableLength);
+          tables[nt] = std::move(tt);
 
           std::string const *tableFileName;
 
@@ -1564,7 +1565,7 @@ int SNAPImplementation::setRefreshMutableValues(ModelObj *const modelObj)
   if (ncoeff != snap->ncoeff)
   {
     HELPER_LOG_ERROR("Wrong number of coefficients\nNumber of coefficients to the "
-                     "model and the one created in SNAP object do not match\n";
+                     "model and the one created in SNAP object do not match\n"
                      "ncoeff = " +
                      std::to_string(ncoeff) +
                      " & SNAP ncoeff = " +
@@ -2399,7 +2400,7 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
     double fraction;
     int itable;
 
-    TABLE *tb;
+    TABLE const *tb;
     union_int_float_t rsq_lookup;
 
     // Loop over all the contributing particles
@@ -2560,10 +2561,9 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
           {
             dEidr_ZBL = zbl->dzbldr(rrsq, iSpecies, jSpecies);
 
-            double const t = rrsq - zbl->cut_inner;
-
             if (rsq > zbl->cut_innersq)
             {
+              double const t = rrsq - zbl->cut_inner;
               double const fswitch = t * t * (zbl->sw1(iSpecies, jSpecies) + zbl->sw2(iSpecies, jSpecies) * t);
               dEidr_ZBL += fswitch;
             }
@@ -2690,6 +2690,7 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
 
             if (rsq > zbl->cut_innersq)
             {
+              double const t = rrsq - zbl->cut_inner;
               double const eswitch = t * t * t * (zbl->sw3(iSpecies, jSpecies) + zbl->sw4(iSpecies, jSpecies) * t);
               phi += eswitch;
             }
