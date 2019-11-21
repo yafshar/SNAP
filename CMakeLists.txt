@@ -63,4 +63,6 @@ target_sources(${MODEL_DRIVER_NAME} PRIVATE
   SNAP.cpp
   SNAPImplementation.cpp
   SNA.cpp
+  ZBL.cpp
+  TABLE.cpp
   )
