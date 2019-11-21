@@ -125,6 +125,23 @@ struct TABLE_INFO
   int tableLength;
 };
 
+/*!
+ * \brief New union declaration
+ *
+ */
+union union_int_float_t {
+  int i;
+  float f;
+};
+
+
+/*!
+ * \brief TABLE class
+ *
+ * TABLE class creates interpolation tables from potential energy and force
+ * values listed in a file(s) as a function of distance.
+ *
+ */
 class TABLE
 {
 public:
@@ -289,60 +306,5 @@ public:
   /*! */
   std::vector<double> f2;
 };
-
-/*!
- * \brief Construct a cubic spline given a set of x and y values
- *
- * \param x Input array of length n
- * \param y Input function value array of length n in order
- * \param n Length of the array (last element index)
- * \param yp1 The first derivative of the interpolating function at point 1
- * \param ypn The first derivative of the interpolating function at point n
- * \param y2 Output function value array of length n
- */
-static void spline(std::vector<double> const &x,
-                   std::vector<double> const &y,
-                   int const n,
-                   double const yp1,
-                   double const ypn,
-                   std::vector<double> &y2);
-
-/*!
- * \brief Returns a cubic spline interpolated value y at given x.
- *
- * \param xa Input array of length n
- * \param ya Input function value array of length n in order
- * \param y2a Output function value array of length n from spline \sa spline
- * \param n Length of the array (last element index)
- * \param x A value of x
- *
- * \return double Interpolated value y
- */
-static double splint(std::vector<double> const &xa,
-                     std::vector<double> const &ya,
-                     std::vector<double> const &y2a,
-                     int const n,
-                     double const x);
-
-/*!
- * \brief Define bitmap parameters based on inner and outer cutoffs
- *
- * \param inner inner cutoff
- * \param outer outer cutoff
- * \param ntablebits number of table bits based on the length in table file
- * \param masklo
- * \param maskhi
- * \param nmask
- * \param nshiftbits
- *
- * \return int 0|false if everything goes well and 1|true if it fails
- */
-static int init_bitmap(double const inner,
-                       double const outer,
-                       int const ntablebits,
-                       int &masklo,
-                       int &maskhi,
-                       int &nmask,
-                       int &nshiftbits);
 
 #endif // TABLE_HPP
