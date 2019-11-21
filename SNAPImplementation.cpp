@@ -31,7 +31,6 @@
 //    Ryan S. Elliott
 //
 
-
 #include "KIM_ModelDriverHeaders.hpp"
 #include "KIM_LogMacros.hpp"
 
@@ -55,7 +54,7 @@
 #ifdef MAXLINE
 #undef MAXLINE
 #endif
-#define MAXLINE 2048
+#define MAXLINE 1024
 
 #ifdef ONE
 #undef ONE
@@ -90,41 +89,65 @@ SNAPImplementation::SNAPImplementation(
                       beta_max(0),
                       rfac0(0.99363), // Set defaults for optional keywords
                       rmin0(0.0),
-                      rcutfac(0.0)
+                      rcutfac(0.0),
+                      snap(nullptr),
+                      nAllSpecies(0),
+                      nHybridStyleSpecies(0),
+                      nzbls(0),
+                      // Metal unit as a default base units
+                      angstrom(1.0),
+                      qqr2e(14.399645354084361),
+                      qelectron(1.0),
+                      inner(0.0),
+                      outer(0.0),
+                      zbl(nullptr),
+                      ntables(0)
 {
   // Everything is good
   *ier = false;
 
   if (!modelDriverCreate)
   {
-    HELPER_LOG_ERROR("The ModelDriverCreate object pointer is not assigned \n");
+    HELPER_LOG_ERROR("The ModelDriverCreate object pointer is not assigned\n");
     *ier = true;
     return;
   }
 
   {
-    std::FILE *parameterFilePointers[NUM_PARAMETER_FILES];
+    std::FILE *parameterFilePointers[MAX_NUM_PARAMETER_FILES];
 
     int numberParameterFiles(0);
 
     // Getting the number of parameter files, open the files and process them
     modelDriverCreate->GetNumberOfParameterFiles(&numberParameterFiles);
-    if (numberParameterFiles != NUM_PARAMETER_FILES)
+    if (numberParameterFiles > MAX_NUM_PARAMETER_FILES)
     {
-      LOG_ERROR("Wrong number of parameter files! \n");
+      LOG_ERROR("Too many parameter files!\n");
+      *ier = true;
+      return;
+    }
+
+    if (!numberParameterFiles)
+    {
+      LOG_ERROR("There is no parameter file!\n");
+      *ier = true;
       return;
     }
 
     *ier = OpenParameterFiles(modelDriverCreate, numberParameterFiles, parameterFilePointers);
     if (*ier)
+    {
       return;
+    }
 
     *ier = ProcessParameterFiles(modelDriverCreate, numberParameterFiles, parameterFilePointers);
 
     CloseParameterFiles(numberParameterFiles, parameterFilePointers);
 
     if (*ier)
+    {
       return;
+    }
   }
 
   *ier = ConvertUnits(modelDriverCreate,
@@ -134,23 +157,33 @@ SNAPImplementation::SNAPImplementation(
                       requestedTemperatureUnit,
                       requestedTimeUnit);
   if (*ier)
+  {
     return;
+  }
 
   *ier = setRefreshMutableValues(modelDriverCreate);
   if (*ier)
+  {
     return;
+  }
 
   *ier = RegisterKIMModelSettings(modelDriverCreate);
   if (*ier)
+  {
     return;
+  }
 
   *ier = RegisterKIMParameters(modelDriverCreate);
   if (*ier)
+  {
     return;
+  }
 
   *ier = RegisterKIMFunctions(modelDriverCreate);
   if (*ier)
+  {
     return;
+  }
 }
 #undef KIM_LOGGER_OBJECT_NAME
 
@@ -160,15 +193,14 @@ SNAPImplementation::~SNAPImplementation()
 
 int SNAPImplementation::Refresh(KIM::ModelRefresh *const modelRefresh)
 {
-  int ier = setRefreshMutableValues(modelRefresh);
-  return ier;
+  return setRefreshMutableValues(modelRefresh);
 }
 
 int SNAPImplementation::WriteParameterizedModel(KIM::ModelWriteParameterizedModel const *const modelWriteParameterizedModel) const
 {
   if (!modelWriteParameterizedModel)
   {
-    HELPER_LOG_ERROR("The modelWriteParameterizedModel object pointer is not assigned \n");
+    HELPER_LOG_ERROR("The modelWriteParameterizedModel object pointer is not assigned\n");
     return true;
   }
 
@@ -180,9 +212,11 @@ int SNAPImplementation::WriteParameterizedModel(KIM::ModelWriteParameterizedMode
 
   std::string coefficient_file(*modelName);
   std::string parameter_file(*modelName);
+  std::string hybrid_file(*modelName);
 
   coefficient_file += ".snapcoeff";
   parameter_file += ".snapparam";
+  hybrid_file += ".hybridparam";
 
   // Set the file name for the next parameter file.
   // It must be called once for each parameter file. The order of these calls is important
@@ -190,6 +224,10 @@ int SNAPImplementation::WriteParameterizedModel(KIM::ModelWriteParameterizedMode
   // generated CMakeLists.txt file.
   modelWriteParameterizedModel->SetParameterFileName(coefficient_file);
   modelWriteParameterizedModel->SetParameterFileName(parameter_file);
+  if (nzbls || ntables)
+  {
+    modelWriteParameterizedModel->SetParameterFileName(hybrid_file);
+  }
 
   // SNAP coefficient file
 
@@ -242,9 +280,9 @@ int SNAPImplementation::WriteParameterizedModel(KIM::ModelWriteParameterizedMode
        << "#\n"
        << "# First line: nelements & ncoeffall\n"
        << "#\n"
-       << "# This SNAP coefficient file has " << nelements << ((nelements > 1) ? " blocks, where \n" : " block, where\n")
-       << "#    First line of each block contains: 'species name' & 'species radius' & 'species weight' \n"
-       << "#    followed by " << ncoeffall << " SNAP coefficients. \n"
+       << "# This SNAP coefficient file has " << nelements << ((nelements > 1) ? " blocks, where\n" : " block, where\n")
+       << "#    First line of each block contains: 'species name' & 'species radius' & 'species weight'\n"
+       << "#    followed by " << ncoeffall << " SNAP coefficients.\n"
        << "#\n";
 
     fs.close();
@@ -308,6 +346,157 @@ int SNAPImplementation::WriteParameterizedModel(KIM::ModelWriteParameterizedMode
     fs.close();
   }
 
+  // HYBRID parameter file
+  if (nzbls || ntables)
+  {
+    buffer = *path + "/" + hybrid_file;
+
+    fs.open(buffer.c_str(), std::fstream::out);
+
+    if (!fs.is_open())
+    {
+      HELPER_LOG_ERROR("Unable to open the parameter file for writing.");
+      return true;
+    }
+    else
+    {
+      if (fs.fail())
+      {
+        HELPER_LOG_ERROR("An error has occurred from opening the file on the associated stream!");
+        return true;
+      }
+
+      fs << "# HYBRID style parameters (extra 'zbl' and two-body pair styles\n"
+         << "# as a table style can be assigned)\n"
+         << "#\n"
+         << "# NOTE:\n"
+         << "#   No mixing rule will be used here.\n"
+         << "#\n"
+         << "#   Each pair (I,J) or (J,I) can be assigned to one style\n"
+         << "#   If you specify the same pair for the second time, it wipes\n"
+         << "#   out all the previous assignments of that pair and the\n"
+         << "#   second one will be calculated for the two interacting atoms\n"
+         << "#   of those types.\n"
+         << "\n\n"
+         << "# Number of elements for the hybrid style\n";
+
+      fs << nHybridStyleSpecies;
+
+      fs << "# Number of elements names, (atom names)\n";
+      for (int iSpec = 0; iSpec < nHybridStyleSpecies; ++iSpec)
+      {
+        fs << hybridStyleSpeciesNames[iSpec] << "  ";
+      }
+      fs << "\n"
+         << std::endl;
+
+      fs << std::setprecision(std::numeric_limits<double>::digits10 + 1) << std::fixed;
+
+      if (nzbls)
+      {
+        fs << "# In the ZBL style, the inner and outer cutoff are the\n"
+           << "# same for all pairs of atom types.\n"
+           << "# zbl  inner  outer\n";
+        fs << "zbl  " << inner << "  " << outer << std::endl;
+        fs << "# Element_1  Element_2  zbl  Z_1  Z_2\n";
+        for (int iSpecies = 0; iSpecies < nAllSpecies; ++iSpecies)
+        {
+          for (int jSpecies = iSpecies; jSpecies < nAllSpecies; ++jSpecies)
+          {
+            if (setflag(iSpecies, jSpecies) == static_cast<int>(HYBRIDSTYLE::ZBL))
+            {
+              fs << allSpeciesNames[iSpecies] << "  " << allSpeciesNames[jSpecies] << "  zbl  " << atomicNumber[iSpecies] << "  " << atomicNumber[jSpecies] << std::endl;
+            }
+          }
+        }
+      }
+
+      if (ntables)
+      {
+        fs << "\n"
+           << "# Style table:\n"
+           << "# table  style  N\n";
+        for (auto i : tables_info)
+        {
+          if (i.tableStyle == TABLESTYLE::LOOKUP)
+          {
+            fs << "table  lookup  " << i.tableLength << std::endl;
+          }
+          else if (i.tableStyle == TABLESTYLE::LINEAR)
+          {
+            fs << "table  linear  " << i.tableLength << std::endl;
+          }
+          else if (i.tableStyle == TABLESTYLE::SPLINE)
+          {
+            fs << "table  spline  " << i.tableLength << std::endl;
+          }
+          else if (i.tableStyle == TABLESTYLE::BITMAP)
+          {
+            fs << "table  bitmap  " << i.tableLength << std::endl;
+          }
+        }
+        fs << "#\n"
+           << "# style = 'lookup' or 'linear' or 'spline' or 'bitmap' =\n"
+           << "# method of interpolation\n"
+           << "# N     = use N values in 'lookup', 'linear', 'spline' tables\n"
+           << "# N     = use 2^N values in 'bitmap' tables\n"
+           << "#\n"
+           << "#\n"
+           << "# 'table' style can be used multiple times. For example, interactions between\n"
+           << "# I and I atoms use a 'linear' table style and interactions between I and J\n"
+           << "# atoms use a 'spline' table style, then you should list the table style two\n"
+           << "# times. Style indexing starts from '1'. It means, that the fisrt style is\n"
+           << "# numbered '1' and the second '2' and so on so forth.\n"
+           << "# Later in the pair interactions, the 'table' style must be added after the\n"
+           << "# I,J atom names followed by the style number and then followed by the\n"
+           << "# remaining coefficients as of 'filename', and 'keyword', and 'cutoff'.\n"
+           << "#\n"
+           << "#\n"
+           << "# The 'filename' specifies a file containing tabulated energy\n"
+           << "# and force values.\n"
+           << "# The 'keyword' specifies a section of the file.\n"
+           << "# The 'cutoff' is an optional coefficient in distance unit.\n"
+           << "#\n"
+           << "#\n"
+           << "# Example 1, we use 2 styles\n"
+           << "# table  linear  1000\n"
+           << "# table  spline  10000\n"
+           << "# I  I  table  1  II.table IIKey 4.0\n"
+           << "# I  J  table  2  IJ.table IJ\n"
+           << "#\n"
+           << "#\n"
+           << "# Example 2, we use one style\n"
+           << "# table  spline  10000\n"
+           << "# I  I  table  1  II.table IIKey 4.0\n"
+           << "# I  J  table  1  IJ.table IJ\n"
+           << "#\n"
+           << "#\n"
+           << "# Example 3, we use one style and have one tabulated file\n"
+           << "# table  spline  10000\n"
+           << "# I  I  table  1  tablefile.txt II 4.0\n"
+           << "# I  J  table  1  tablefile.txt IJ 4.8\n"
+           << "#\n"
+           << "#\n"
+           << "#- Element_1  Element_2  table  style_number  filename  keyword  [cutoff]\n";
+        for (int iSpecies = 0; iSpecies < nAllSpecies; ++iSpecies)
+        {
+          for (int jSpecies = iSpecies; jSpecies < nAllSpecies; ++jSpecies)
+          {
+            if (setflag(iSpecies, jSpecies) == static_cast<int>(HYBRIDSTYLE::TABLE))
+            {
+              fs << allSpeciesNames[iSpecies] << "  " << allSpeciesNames[jSpecies] << "  table  " << tableNumber(iSpecies, jSpecies) << "  filename  keyword  [cutoff]" << std::endl;
+            }
+          }
+        }
+      }
+      fs << "\n\n"
+         << "#\n"
+         << "# HYBRID style parameter file"
+         << "#\n";
+      fs.close();
+    }
+  }
+
   return false;
 }
 
@@ -324,6 +513,7 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const modelCompute,
   bool isComputeParticleEnergy = false;
   bool isComputeVirial = false;
   bool isComputeParticleVirial = false;
+  bool isHybrid = (nzbls || ntables);
 
   // KIM API Model Input
   int const *particleSpeciesCodes = NULL;
@@ -357,7 +547,7 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const modelCompute,
   if (ier)
   {
     HELPER_LOG_ERROR("setComputeMutableValues fails.");
-    return ier;
+    return true;
   }
 
   if (beta_max < numberOfContributingParticles_)
@@ -384,21 +574,12 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const modelCompute,
 
 int SNAPImplementation::ComputeArgumentsCreate(KIM::ModelComputeArgumentsCreate *const modelComputeArgumentsCreate) const
 {
-  int ier = RegisterKIMComputeArgumentsSettings(modelComputeArgumentsCreate);
-  if (ier)
-  {
-    return ier;
-  }
-  // Nothing else to do for this case
-  // Everything is good
-  return false;
+  return RegisterKIMComputeArgumentsSettings(modelComputeArgumentsCreate);
 }
 
-int SNAPImplementation::ComputeArgumentsDestroy(KIM::ModelComputeArgumentsDestroy *const modelComputeArgumentsDestroy) const
+int SNAPImplementation::ComputeArgumentsDestroy(KIM::ModelComputeArgumentsDestroy *const /*modelComputeArgumentsDestroy*/) const
 {
-  // Avoid not used warning
-  (void)modelComputeArgumentsDestroy;
-  // Nothing else to do for this case
+  // Nothing to do for this case
   // Everything is good
   return false;
 }
@@ -414,17 +595,16 @@ int SNAPImplementation::OpenParameterFiles(KIM::ModelDriverCreate *const modelDr
   {
     std::string const *parameterFileName;
 
-    int ier = modelDriverCreate->GetParameterFileName(i, &parameterFileName);
-    if (ier)
+    if (modelDriverCreate->GetParameterFileName(i, &parameterFileName))
     {
-      LOG_ERROR("Unable to get parameter file name \n");
-      return ier;
+      LOG_ERROR("Unable to get the parameter file name\n");
+      return true;
     }
 
     parameterFilePointers[i] = std::fopen(parameterFileName->c_str(), "r");
     if (!parameterFilePointers[i])
     {
-      HELPER_LOG_ERROR("SNAP parameter file number " + std::to_string(i) + " can not be opened \n");
+      HELPER_LOG_ERROR("The parameter file (" + *parameterFileName + ") can not be opened\n");
       for (int j = i - 1; i <= 0; --i)
       {
         std::fclose(parameterFilePointers[j]);
@@ -459,33 +639,49 @@ void SNAPImplementation::GetNextDataLine(std::FILE *const filePtr,
   // remove comments starting with `#' in a line
   char *pch = std::strchr(nextLinePtr, '#');
   if (pch)
+  {
     *pch = '\0';
+  }
 }
 
 #define KIM_LOGGER_OBJECT_NAME modelDriverCreate
 int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const modelDriverCreate,
-                                              int const /* numberParameterFiles */,
+                                              int const numberParameterFiles,
                                               std::FILE *const *parameterFilePointers)
 {
   char nextLine[MAXLINE];
 
   int endOfFileFlag(0);
 
+  // keep track of known species
+  std::map<KIM::SpeciesName const, int, KIM::SPECIES_NAME::Comparator> speciesMap;
+
   // Read SNAP coefficient file
   GetNextDataLine(parameterFilePointers[0], nextLine, MAXLINE, &endOfFileFlag);
   if (endOfFileFlag)
   {
-    HELPER_LOG_ERROR("End of file in SNAP coefficient file \n");
+    HELPER_LOG_ERROR("End of file in the SNAP coefficient file.\n");
     return true;
   }
 
   int ier = std::sscanf(nextLine, "%d %d", &nelements, &ncoeffall);
   if (ier != 2)
   {
-    std::string msg = "unable to read nelements & ncoeffall from the line: \n";
-    msg += nextLine;
-    msg += "\n";
-    HELPER_LOG_ERROR(msg);
+    HELPER_LOG_ERROR("Unable to read nelements & ncoeffall from the line:\n" +
+                     std::string(nextLine) +
+                     "\n");
+    return true;
+  }
+
+  if (nelements < 1)
+  {
+    HELPER_LOG_ERROR("Incorrect number of elements in the SNAP coefficient file.\n");
+    return true;
+  }
+
+  if (ncoeffall < 1)
+  {
+    HELPER_LOG_ERROR("Incorrect number of coefficients in the SNAP coefficient file.\n");
     return true;
   }
 
@@ -503,7 +699,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
     GetNextDataLine(parameterFilePointers[0], nextLine, MAXLINE, &endOfFileFlag);
     if (endOfFileFlag)
     {
-      HELPER_LOG_ERROR("End of file in SNAP coefficient file \n");
+      HELPER_LOG_ERROR("End of file in the SNAP coefficient file.\n");
       return true;
     }
 
@@ -511,11 +707,16 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
     ier = std::sscanf(nextLine, "%s %lf %lf", spec, &radelem[ielem], &wjelem[ielem]);
     if (ier != 3)
     {
-      std::string msg = "Incorrect format in SNAP coefficient file \n";
-      msg += "Unable to read spec, radius & weight from the line: \n";
-      msg += nextLine;
-      msg += "\n";
-      HELPER_LOG_ERROR(msg);
+      HELPER_LOG_ERROR("Incorrect format in the SNAP coefficient file.\n"
+                       "Unable to read spec, radius & weight from the line:\n" +
+                       std::string(nextLine) +
+                       "\n");
+      return true;
+    }
+
+    if (radelem[ielem] < 0.0)
+    {
+      HELPER_LOG_ERROR("Incorrect radius in the SNAP coefficient file.\n");
       return true;
     }
 
@@ -523,35 +724,35 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
 
     if (speciesName.ToString() == "unknown")
     {
-      std::string msg = "Incorrect format in SNAP coefficient file \n";
-      msg += "Input species of '";
-      msg += spec;
-      msg += "' is unknown. \n";
-      HELPER_LOG_ERROR(msg);
+      HELPER_LOG_ERROR("Incorrect format in the SNAP coefficient file.\n"
+                       "The species name '" +
+                       std::string(spec) +
+                       "' is unknown.\n");
       return true;
     }
 
-    for (int i = 0; i < ielem; ++i)
+    // check for new species
+    auto iter = speciesMap.find(speciesName);
+    if (iter == speciesMap.end())
     {
-      KIM::SpeciesName const tmpName(elements[i]);
-      if (speciesName == tmpName)
+      ier = modelDriverCreate->SetSpeciesCode(speciesName, ielem);
+      if (ier)
       {
-        std::string msg = "Incorrect format in SNAP coefficient file \n";
-        msg += "Species '";
-        msg += spec;
-        msg += "' is already defined and exist. \n";
-        HELPER_LOG_ERROR(msg);
-        return true;
+        LOG_ERROR("SetSpeciesCode failed to set the new species.\n");
+        return ier;
       }
+
+      speciesMap[speciesName] = ielem;
+
+      elements[ielem] = speciesName.ToString();
     }
-
-    elements[ielem] = speciesName.ToString();
-
-    ier = modelDriverCreate->SetSpeciesCode(speciesName, ielem);
-    if (ier)
+    else
     {
-      LOG_ERROR("SetSpeciesCode failed to set the new species. \n");
-      return ier;
+      HELPER_LOG_ERROR("Incorrect format in the SNAP coefficient file.\n"
+                       "The Species '" +
+                       std::string(spec) +
+                       "' is already defined and exist.\n");
+      return true;
     }
 
     for (int icoeff = 0; icoeff < ncoeffall; ++icoeff)
@@ -559,7 +760,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
       GetNextDataLine(parameterFilePointers[0], nextLine, MAXLINE, &endOfFileFlag);
       if (endOfFileFlag)
       {
-        HELPER_LOG_ERROR("End of file in SNAP coefficient file. \n");
+        HELPER_LOG_ERROR("End of file in the SNAP coefficient file.\n");
         return true;
       }
 
@@ -567,9 +768,10 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
       ier = std::sscanf(nextLine, "%lf", &coeff);
       if (ier != 1)
       {
-        HELPER_LOG_ERROR("Incorrect format in SNAP coefficient file. \n");
+        HELPER_LOG_ERROR("Incorrect format in the SNAP coefficient file.\n");
         return true;
       }
+
       coeffelem(ielem, icoeff) = coeff;
     }
   }
@@ -583,7 +785,9 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
   {
     GetNextDataLine(parameterFilePointers[1], nextLine, MAXLINE, &endOfFileFlag);
     if (endOfFileFlag)
+    {
       break;
+    }
 
     // words = ptrs to all words in line
     // strip single and double quotes from words
@@ -628,24 +832,515 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
     }
     else
     {
-      std::string msg = "Incorrect SNAP parameter file \n";
-      msg += "Wrong SNAP keywords of ";
-      msg += keywd;
-      msg += ", ";
-      msg += keyval;
-      msg += "\n";
-      HELPER_LOG_ERROR(msg);
+      HELPER_LOG_ERROR("Incorrect SNAP parameter file.\n"
+                       "Incorrect SNAP keywords of " +
+                       std::string(keywd) +
+                       ", " +
+                       std::string(keyval) +
+                       "\n");
       return true;
     }
   }
 
   if (!rcutfacflag || !twojmaxflag)
   {
-    std::string msg = "Incorrect SNAP parameter file \n";
-    msg += rcutfacflag ? "'twojmaxflag' is not given \n" : "'rcutfacflag' is not given \n";
-    HELPER_LOG_ERROR(msg);
+    HELPER_LOG_ERROR("Incorrect SNAP parameter file.\n" +
+                     std::string(rcutfacflag ? "'twojmaxflag' is not given\n" : "'rcutfacflag' is not given\n"));
     return true;
   }
+
+  // Process Hybrid parameter file
+  if (numberParameterFiles > 2)
+  {
+    // Read the Hybrid parameter file
+    GetNextDataLine(parameterFilePointers[2], nextLine, MAXLINE, &endOfFileFlag);
+    if (endOfFileFlag)
+    {
+      HELPER_LOG_ERROR("End of file in the Hybrid parameter file.\n");
+      return true;
+    }
+
+    int ier = std::sscanf(nextLine, "%d", &nHybridStyleSpecies);
+    if (ier != 1)
+    {
+      HELPER_LOG_ERROR("Unable to read the number of unique species from the line:\n" +
+                       std::string(nextLine) +
+                       "\n");
+      return true;
+    }
+
+    if (nHybridStyleSpecies <= 0)
+    {
+      HELPER_LOG_ERROR("Incorrect number of unique species '" +
+                       std::to_string(nHybridStyleSpecies) +
+                       "' in the Hybrid parameter file.\n");
+      return true;
+    }
+
+    // Allocate memory based on the number of species
+
+    nAllSpecies = nelements;
+
+    allSpeciesNames.reserve(nelements + nHybridStyleSpecies);
+    for (auto i : elements)
+    {
+      allSpeciesNames.push_back(i);
+    }
+
+    // Set up memory for the species lists
+    hybridStyleSpeciesNames.resize(nHybridStyleSpecies);
+
+    GetNextDataLine(parameterFilePointers[2], nextLine, MAXLINE, &endOfFileFlag);
+    if (endOfFileFlag)
+    {
+      HELPER_LOG_ERROR("End of file in the Hybrid parameter file.\n");
+      return true;
+    }
+
+    for (int iSpec = 0; iSpec < nHybridStyleSpecies; ++iSpec)
+    {
+      char *spec = std::strtok(iSpec ? NULL : nextLine, "' \t\n\r\f");
+      if (!spec)
+      {
+        HELPER_LOG_ERROR("Unable to read the name of unique species from the line:\n" +
+                         std::string(nextLine) +
+                         "\n");
+        return true;
+      }
+
+      KIM::SpeciesName const speciesName(spec);
+
+      if (speciesName.ToString() == "unknown")
+      {
+        HELPER_LOG_ERROR("Incorrect format in the Hybrid parameter file.\n"
+                         "The species name '" +
+                         std::string(spec) +
+                         "' is unknown.\n");
+        return true;
+      }
+
+      for (int i = 0; i < iSpec; ++i)
+      {
+        KIM::SpeciesName const tmpName(hybridStyleSpeciesNames[i]);
+        if (speciesName == tmpName)
+        {
+          HELPER_LOG_ERROR("Incorrect format in the Hybrid parameter file.\n"
+                           "The Species '" +
+                           std::string(spec) +
+                           "' is already defined and exist.\n");
+          return true;
+        }
+      }
+
+      hybridStyleSpeciesNames[iSpec] = speciesName.ToString();
+
+      // check for new species
+      auto iter = speciesMap.find(speciesName);
+      if (iter == speciesMap.end())
+      {
+        ier = modelDriverCreate->SetSpeciesCode(speciesName, nAllSpecies);
+        if (ier)
+        {
+          LOG_ERROR("SetSpeciesCode failed to set the new species.\n");
+          return ier;
+        }
+
+        speciesMap[speciesName] = nAllSpecies++;
+
+        allSpeciesNames.push_back(speciesName.ToString());
+      }
+    } // End of loop for the number of species
+
+    while (1)
+    {
+      GetNextDataLine(parameterFilePointers[2], nextLine, MAXLINE, &endOfFileFlag);
+      if (endOfFileFlag)
+      {
+        break;
+      }
+
+      char *keywd = std::strtok(nextLine, "' \t\n\r\f");
+      char *keyval1 = std::strtok(NULL, "' \t\n\r\f");
+      char *keyval2 = std::strtok(NULL, "' \t\n\r\f");
+
+      if (!std::strcmp(keywd, "zbl"))
+      {
+        ++nzbls;
+        if (nzbls >= 2)
+        {
+          HELPER_LOG_ERROR("There is more than one zbl style in the Hybrid parameter file\n");
+          return true;
+        }
+
+        if (!keyval1 || !keyval2)
+        {
+          HELPER_LOG_ERROR("Incorrect zbl style in the Hybrid parameter file.\n");
+          return true;
+        }
+
+        inner = std::atof(keyval1);
+        outer = std::atof(keyval2);
+
+        if (inner <= 0.0)
+        {
+          HELPER_LOG_ERROR("Incorrect distance (where switching function begins) for ZBL interaction in the Hybrid parameter file.\n");
+          return true;
+        }
+
+        if (inner > outer)
+        {
+          HELPER_LOG_ERROR("Incorrect global cutoff for ZBL interaction in the Hybrid parameter file.\n");
+          return true;
+        }
+
+        continue;
+      } // if zbl
+
+      if (keyval2)
+      {
+        if (!std::strcmp(keyval2, "table"))
+        {
+          ++ntables;
+          continue;
+        }
+      }
+    } // End of while loop
+
+    if (!nzbls && !ntables)
+    {
+      HELPER_LOG_ERROR("There is no zbl/table style in the Hybrid parameter file.\n");
+      return true;
+    }
+
+    // Allocate memory
+    setflag.resize(nAllSpecies, nAllSpecies, static_cast<int>(HYBRIDSTYLE::NONE));
+
+    if (nzbls)
+    {
+      atomicNumber.resize(nAllSpecies, 0.0);
+    }
+
+    if (ntables)
+    {
+      tables_info.reserve(ntables);
+
+      tables.resize(ntables);
+
+      tableNumber.resize(nAllSpecies, nAllSpecies, -1);
+    }
+
+    // Rewind the file
+    if (std::fseek(parameterFilePointers[2], 0, SEEK_SET))
+    {
+      HELPER_LOG_ERROR("Filed to rewind the Hybrid parameter file.\n");
+      return true;
+    }
+
+    int nTableStyles = 0;
+    int nTables = 0;
+
+    while (1)
+    {
+      GetNextDataLine(parameterFilePointers[2], nextLine, MAXLINE, &endOfFileFlag);
+      if (endOfFileFlag)
+      {
+        break;
+      }
+
+      char *keywd = std::strtok(nextLine, "' \t\n\r\f");
+      char *keyval1 = std::strtok(NULL, "' \t\n\r\f");
+      char *keyval2 = std::strtok(NULL, "' \t\n\r\f");
+
+      if (!keyval1 || !keyval2)
+      {
+        continue;
+      }
+
+      if (!std::strcmp(keywd, "zbl"))
+      {
+        continue;
+      }
+
+      if (!std::strcmp(keywd, "table"))
+      {
+        if (!keyval1 || !keyval2)
+        {
+          HELPER_LOG_ERROR("Wrong table style in the Hybrid parameter file.\n");
+          return true;
+        }
+
+        TABLESTYLE tabstyle;
+
+        if (!std::strcmp(keyval1, "lookup"))
+        {
+          tabstyle = TABLESTYLE::LOOKUP;
+        }
+        else if (!std::strcmp(keyval1, "linear"))
+        {
+          tabstyle = TABLESTYLE::LINEAR;
+        }
+        else if (!std::strcmp(keyval1, "spline"))
+        {
+          tabstyle = TABLESTYLE::SPLINE;
+        }
+        else if (!std::strcmp(keyval1, "bitmap"))
+        {
+          tabstyle = TABLESTYLE::BITMAP;
+        }
+        else
+        {
+          HELPER_LOG_ERROR("Unknown table style '" +
+                           std::string(keyval1) +
+                           "' in the Hybrid parameter file.\n");
+          return true;
+        }
+
+        int const tablength = std::atoi(keyval2);
+        if (tablength < 2)
+        {
+          HELPER_LOG_ERROR("Illegal number of table entries " +
+                           std::string(keyval2) +
+                           " < 2\n");
+          return true;
+        }
+
+        tables_info.resize(nTableStyles + 1);
+
+        tables_info[nTableStyles].tableStyle = tabstyle;
+        tables_info[nTableStyles].tableLength = tablength;
+        ++nTableStyles;
+
+        continue;
+      }
+
+      if ((!std::strcmp(keyval2, "zbl")) || (!std::strcmp(keyval2, "table")))
+      {
+        char *keyval3 = std::strtok(NULL, "' \t\n\r\f");
+        char *keyval4 = std::strtok(NULL, "' \t\n\r\f");
+        char *keyval5 = std::strtok(NULL, "' \t\n\r\f");
+        char *keyval6 = std::strtok(NULL, "' \t\n\r\f");
+
+        if (!keyval3 || !keyval4)
+        {
+          HELPER_LOG_ERROR("Incorrect zbl/table style in the Hybrid parameter file.\n");
+          return true;
+        }
+
+        // convert species strings to proper type instances
+        KIM::SpeciesName const specName1(keywd);
+        KIM::SpeciesName const specName2(keyval1);
+
+        // check for the species
+        auto iter = speciesMap.find(specName1);
+        if (iter == speciesMap.end())
+        {
+          HELPER_LOG_ERROR("The species name '" +
+                           specName1.ToString() +
+                           "' is not defined\n");
+          return true;
+        }
+        int const iSpecies = speciesMap[specName1];
+
+        iter = speciesMap.find(specName2);
+        if (iter == speciesMap.end())
+        {
+          HELPER_LOG_ERROR("The species name '" +
+                           specName2.ToString() +
+                           "' is not defined\n");
+          return true;
+        }
+        int const jSpecies = speciesMap[specName2];
+
+        if (!std::strcmp(keyval2, "zbl"))
+        {
+          if (keyval5 || keyval6)
+          {
+            HELPER_LOG_ERROR("Incorrect zbl style in the Hybrid parameter file.\n");
+            return true;
+          }
+
+          double const z_iSpecies = std::atof(keyval3);
+          double const z_jSpecies = std::atof(keyval4);
+
+          if (iSpecies == jSpecies)
+          {
+            if (z_iSpecies != z_jSpecies)
+            {
+              HELPER_LOG_ERROR("Incorrect ZBL args.\n"
+                               "When i == j, it is required that Z_i == Z_j.\n");
+              return true;
+            }
+          }
+          else
+          {
+            setflag(jSpecies, iSpecies) = static_cast<int>(HYBRIDSTYLE::ZBL);
+
+            atomicNumber[jSpecies] = z_jSpecies;
+          }
+
+          setflag(iSpecies, jSpecies) = static_cast<int>(HYBRIDSTYLE::ZBL);
+
+          atomicNumber[iSpecies] = z_iSpecies;
+
+          continue;
+        } // if zbl
+
+        if (!std::strcmp(keyval2, "table"))
+        {
+          // specName1  specName2  table  1  filename  keyword  [cutoff]
+
+          // Get the table style number
+          int const tableStyleNumber = std::stoi(keyval3);
+          if (tableStyleNumber > nTableStyles)
+          {
+            HELPER_LOG_ERROR("Incorrect style number > number of defined table styles.\n");
+            return true;
+          }
+
+          int const sn = tableStyleNumber - 1;
+          int const nt = nTables++;
+
+          tables[nt] = std::move(TABLE(tables_info[sn].tableStyle, tables_info[sn].tableLength));
+
+          std::string const *tableFileName;
+
+          int tableFileNumber = 3;
+          for (; tableFileNumber < numberParameterFiles; ++tableFileNumber)
+          {
+            int ier = modelDriverCreate->GetParameterFileName(tableFileNumber, &tableFileName);
+            if (ier)
+            {
+              LOG_ERROR("Unable to get the table file name.\n");
+              return ier;
+            }
+
+            if (!std::strcmp(keyval4, tableFileName->c_str()))
+            {
+              break;
+            }
+          }
+
+          if (tableFileNumber >= numberParameterFiles)
+          {
+            HELPER_LOG_ERROR("Incorrect TABLE filename.\n");
+            return true;
+          }
+
+          // Table keyword
+          if (!keyval5)
+          {
+            HELPER_LOG_ERROR("Incorrect table style in the Hybrid parameter file (No keyword).\n");
+            return true;
+          }
+
+          // Read the table
+          if (tables[nt].read_table(parameterFilePointers[tableFileNumber], keyval5))
+          {
+            HELPER_LOG_ERROR("Failed to read from the table file '" +
+                             std::string(keyval4) +
+                             "'.\n");
+            return true;
+          }
+
+          // Check the table parameters and insure cutoff is within table
+          // for BITMAP tables, file values can be in non-ascending order
+          if (tables[nt].ninput <= 1)
+          {
+            HELPER_LOG_ERROR("Invalid table length.\n");
+            return true;
+          }
+
+          // Set the table cutoff
+          if (keyval6)
+          {
+            tables[nt].cut = std::atof(keyval6);
+
+            if (tables[nt].cut < 0.0)
+            {
+              HELPER_LOG_ERROR("Invalid table cutoff.\n");
+              return true;
+            }
+          }
+          else if (tables[nt].rflag != TABLEDISTANCESTYLE::NONE)
+          {
+            tables[nt].cut = tables[nt].rhi;
+          }
+          else
+          {
+            tables[nt].cut = tables[nt].rfile[tables[nt].ninput - 1];
+          }
+
+          double rlo;
+          double rhi;
+
+          if (tables[nt].rflag == TABLEDISTANCESTYLE::NONE)
+          {
+            rlo = tables[nt].rfile[0];
+            rhi = tables[nt].rfile[tables[nt].ninput - 1];
+          }
+          else
+          {
+            rlo = tables[nt].rlo;
+            rhi = tables[nt].rhi;
+          }
+
+          if (tables[nt].cut <= rlo || tables[nt].cut > rhi)
+          {
+            HELPER_LOG_ERROR("Invalid table cutoff.\n");
+            return true;
+          }
+
+          if (rlo <= 0.0)
+          {
+            HELPER_LOG_ERROR("Invalid table cutoff.\n");
+            return true;
+          }
+
+          // match = 1, if don't need to spline read-in tables this is only
+          // the case if r values needed by final tables exactly match r
+          // values read from the file for tabstyle SPLINE, always need to
+          // build spline tables
+          tables[nt].match = 0;
+
+          if (tables[nt].tableStyle == TABLESTYLE::LINEAR &&
+              tables[nt].ninput == tables[nt].tableLength &&
+              tables[nt].rflag == TABLEDISTANCESTYLE::RSQ &&
+              tables[nt].rhi == tables[nt].cut)
+          {
+            tables[nt].match = 1;
+          }
+
+          if (tables[nt].tableStyle == TABLESTYLE::BITMAP &&
+              tables[nt].ninput == 1 << tables[nt].tableLength &&
+              tables[nt].rflag == TABLEDISTANCESTYLE::BITMAP &&
+              tables[nt].rhi == tables[nt].cut)
+          {
+            tables[nt].match = 1;
+          }
+
+          if (tables[nt].rflag == TABLEDISTANCESTYLE::BITMAP &&
+              tables[nt].match == 0)
+          {
+            HELPER_LOG_ERROR("Bitmapped table in the file does not match requested table.\n");
+            return true;
+          }
+
+          if (iSpecies != jSpecies)
+          {
+            setflag(jSpecies, iSpecies) = static_cast<int>(HYBRIDSTYLE::TABLE);
+
+            tableNumber(jSpecies, iSpecies) = nt;
+          }
+
+          setflag(iSpecies, jSpecies) = static_cast<int>(HYBRIDSTYLE::TABLE);
+
+          tableNumber(iSpecies, jSpecies) = nt;
+
+          continue;
+        } // if table
+      }   // if zbl or table
+    }     // End of while loop
+  }       // if numberParameterFiles > 2
 
   // everything is good
   return false;
@@ -656,7 +1351,9 @@ void SNAPImplementation::CloseParameterFiles(int const numberParameterFiles,
                                              std::FILE *const *parameterFilePointers)
 {
   for (int i = 0; i < numberParameterFiles; ++i)
+  {
     std::fclose(parameterFilePointers[i]);
+  }
 }
 
 #define KIM_LOGGER_OBJECT_NAME modelDriverCreate
@@ -674,7 +1371,7 @@ int SNAPImplementation::ConvertUnits(KIM::ModelDriverCreate *const modelDriverCr
   KIM::TemperatureUnit const fromTemperature = KIM::TEMPERATURE_UNIT::K;
   KIM::TimeUnit const fromTime = KIM::TIME_UNIT::ps;
 
-  // changing units of sigma, gamma, and cutoff
+  // changing units of length
   double convertLength = ONE;
   int ier = modelDriverCreate->ConvertUnit(fromLength,
                                            fromEnergy,
@@ -686,7 +1383,7 @@ int SNAPImplementation::ConvertUnits(KIM::ModelDriverCreate *const modelDriverCr
                                            requestedChargeUnit,
                                            requestedTemperatureUnit,
                                            requestedTimeUnit,
-                                           1.0,
+                                           ONE,
                                            0.0,
                                            0.0,
                                            0.0,
@@ -698,14 +1395,35 @@ int SNAPImplementation::ConvertUnits(KIM::ModelDriverCreate *const modelDriverCr
     return ier;
   }
 
-  // convert to active units
+  // Convert to active units
   if (convertLength != ONE)
   {
     std::for_each(radelem.begin(), radelem.end(), [&](double &rc) { rc *= convertLength; });
     rmin0 *= convertLength;
+    if (nzbls)
+    {
+      angstrom *= convertLength;
+      qqr2e *= convertLength;
+      inner *= convertLength;
+      outer *= convertLength;
+    }
+    if (ntables)
+    {
+      for (int nt = 0; nt < ntables; ++nt)
+      {
+        tables[nt].rlo *= convertLength;
+        tables[nt].rhi *= convertLength;
+        tables[nt].fplo /= convertLength;
+        tables[nt].fplo /= convertLength;
+        tables[nt].fphi /= convertLength;
+        tables[nt].fphi /= convertLength;
+        std::for_each(tables[nt].rfile.begin(), tables[nt].rfile.end(), [&](double &r) { r *= convertLength; });
+        std::for_each(tables[nt].ffile.begin(), tables[nt].ffile.end(), [&](double &f) { f /= convertLength; });
+      }
+    }
   }
 
-  // changing units of A and lambda
+  // Changing units of energy
   double convertEnergy = ONE;
   ier = modelDriverCreate->ConvertUnit(fromLength,
                                        fromEnergy,
@@ -718,7 +1436,7 @@ int SNAPImplementation::ConvertUnits(KIM::ModelDriverCreate *const modelDriverCr
                                        requestedTemperatureUnit,
                                        requestedTimeUnit,
                                        0.0,
-                                       1.0,
+                                       ONE,
                                        0.0,
                                        0.0,
                                        0.0,
@@ -729,7 +1447,7 @@ int SNAPImplementation::ConvertUnits(KIM::ModelDriverCreate *const modelDriverCr
     return ier;
   }
 
-  // convert to active units
+  // Convert to active units
   if (convertEnergy != ONE)
   {
     // Loop over nelements blocks in the SNAP coefficient file
@@ -740,12 +1458,61 @@ int SNAPImplementation::ConvertUnits(KIM::ModelDriverCreate *const modelDriverCr
         coeffelem(ielem, icoeff) *= convertEnergy;
       }
     }
+    if (nzbls)
+    {
+      qqr2e *= convertEnergy;
+    }
+    if (ntables)
+    {
+      for (int nt = 0; nt < ntables; ++nt)
+      {
+        tables[nt].fplo *= convertEnergy;
+        tables[nt].fphi *= convertEnergy;
+        std::for_each(tables[nt].ffile.begin(), tables[nt].ffile.end(), [&](double &f) { f *= convertEnergy; });
+        std::for_each(tables[nt].efile.begin(), tables[nt].efile.end(), [&](double &e) { e *= convertEnergy; });
+      }
+    }
+  }
+
+  // Changing units of charge
+  double convertCharge = ONE;
+  ier = modelDriverCreate->ConvertUnit(fromLength,
+                                       fromEnergy,
+                                       fromCharge,
+                                       fromTemperature,
+                                       fromTime,
+                                       requestedLengthUnit,
+                                       requestedEnergyUnit,
+                                       requestedChargeUnit,
+                                       requestedTemperatureUnit,
+                                       requestedTimeUnit,
+                                       0.0,
+                                       0.0,
+                                       ONE,
+                                       0.0,
+                                       0.0,
+                                       &convertCharge);
+  if (ier)
+  {
+    LOG_ERROR("Unable to convert energy unit");
+    return ier;
+  }
+
+  // Convert to active units
+  if (convertCharge != ONE)
+  {
+    if (nzbls)
+    {
+      qqr2e /= convertCharge;
+      qqr2e /= convertCharge;
+      qelectron *= convertCharge;
+    }
   }
 
   // Register units
   ier = modelDriverCreate->SetUnits(requestedLengthUnit,
                                     requestedEnergyUnit,
-                                    KIM::CHARGE_UNIT::unused,
+                                    requestedChargeUnit,
                                     KIM::TEMPERATURE_UNIT::unused,
                                     KIM::TIME_UNIT::unused);
   if (ier)
@@ -771,12 +1538,14 @@ int SNAPImplementation::setRefreshMutableValues(ModelObj *const modelObj)
 
     if (ntmp != ncoeffall)
     {
-      std::string msg = "Incorrect args. \n";
-      msg += "ncoeffall = " + std::to_string(ncoeffall);
-      msg += " ntmp = " + std::to_string(ntmp);
-      msg += " ncoeff = " + std::to_string(ncoeff);
-      msg += "\n";
-      HELPER_LOG_ERROR(msg);
+      HELPER_LOG_ERROR("Incorrect args.\n"
+                       "ncoeffall = " +
+                       std::to_string(ncoeffall) +
+                       " ntmp = " +
+                       std::to_string(ntmp) +
+                       " ncoeff = " +
+                       std::to_string(ncoeff) +
+                       "\n");
       return true;
     }
   }
@@ -794,12 +1563,13 @@ int SNAPImplementation::setRefreshMutableValues(ModelObj *const modelObj)
   // Extra check
   if (ncoeff != snap->ncoeff)
   {
-    std::string msg = "Wrong number of coefficients \n";
-    msg += "Number of coefficients to the model and the one created in SNAP object do not match \n";
-    msg += "ncoeff = " + std::to_string(ncoeff);
-    msg += " & SNAP ncoeff = " + std::to_string(snap->ncoeff);
-    msg += "\n";
-    HELPER_LOG_ERROR(msg);
+    HELPER_LOG_ERROR("Wrong number of coefficients\nNumber of coefficients to the "
+                     "model and the one created in SNAP object do not match\n";
+                     "ncoeff = " +
+                     std::to_string(ncoeff) +
+                     " & SNAP ncoeff = " +
+                     std::to_string(snap->ncoeff) +
+                     "\n");
     return true;
   }
 
@@ -821,6 +1591,43 @@ int SNAPImplementation::setRefreshMutableValues(ModelObj *const modelObj)
 
       // Set the square of cutoff for all pairs
       cutsq(ielem, jelem) = cutsq(jelem, ielem) = cut * cut;
+    }
+  }
+
+  if (nzbls)
+  {
+    // Construct the ZBL object
+    zbl.reset(new ZBL(inner, outer));
+
+    zbl->allocate(nAllSpecies);
+
+    rcutmax = std::max(rcutmax, zbl->cut_global);
+
+    for (int iSpecies = 0; iSpecies < nAllSpecies; ++iSpecies)
+    {
+      for (int jSpecies = iSpecies; jSpecies < nAllSpecies; ++jSpecies)
+      {
+        if (setflag(iSpecies, jSpecies) == static_cast<int>(HYBRIDSTYLE::ZBL))
+        {
+          zbl->set_coeff(iSpecies, jSpecies, atomicNumber[iSpecies], atomicNumber[jSpecies], angstrom, qqr2e, qelectron);
+        }
+      }
+    }
+  }
+
+  if (ntables)
+  {
+    for (int nt = 0; nt < ntables; ++nt)
+    {
+      rcutmax = std::max(rcutmax, tables[nt].cut);
+
+      // spline read-in values and compute r,e,f vectors within table
+      if (tables[nt].match == 0)
+      {
+        tables[nt].spline_table();
+      }
+
+      tables[nt].compute_table();
     }
   }
 
@@ -918,7 +1725,8 @@ int SNAPImplementation::getComputeIndex(bool const isComputeProcess_dEdr,
                                         bool const isComputeForces,
                                         bool const isComputeParticleEnergy,
                                         bool const isComputeVirial,
-                                        bool const isComputeParticleVirial) const
+                                        bool const isComputeParticleVirial,
+                                        bool const isHybrid) const
 {
   int const processd2E = 2;
   int const energy = 2;
@@ -926,22 +1734,34 @@ int SNAPImplementation::getComputeIndex(bool const isComputeProcess_dEdr,
   int const particleEnergy = 2;
   int const virial = 2;
   int const particleVirial = 2;
+  int const hybrid = 2;
+
+  int const isComputeProcess_dEdr_int = static_cast<int>(isComputeProcess_dEdr);
+  int const isComputeProcess_d2Edr2_int = static_cast<int>(isComputeProcess_d2Edr2);
+  int const isComputeEnergy_int = static_cast<int>(isComputeEnergy);
+  int const isComputeForces_int = static_cast<int>(isComputeForces);
+  int const isComputeParticleEnergy_int = static_cast<int>(isComputeParticleEnergy);
+  int const isComputeVirial_int = static_cast<int>(isComputeVirial);
+  int const isComputeParticleVirial_int = static_cast<int>(isComputeParticleVirial);
+  int const isHybrid_int = static_cast<int>(isHybrid);
 
   int index = 0;
   // processdE
-  index += (int(isComputeProcess_dEdr)) * processd2E * energy * force * particleEnergy * virial * particleVirial;
+  index += isComputeProcess_dEdr_int * processd2E * energy * force * particleEnergy * virial * particleVirial * hybrid;
   // processd2E
-  index += (int(isComputeProcess_d2Edr2)) * energy * force * particleEnergy * virial * particleVirial;
+  index += isComputeProcess_d2Edr2_int * energy * force * particleEnergy * virial * particleVirial * hybrid;
   // energy
-  index += (int(isComputeEnergy)) * force * particleEnergy * virial * particleVirial;
+  index += isComputeEnergy_int * force * particleEnergy * virial * particleVirial * hybrid;
   // force
-  index += (int(isComputeForces)) * particleEnergy * virial * particleVirial;
+  index += isComputeForces_int * particleEnergy * virial * particleVirial * hybrid;
   // particleEnergy
-  index += (int(isComputeParticleEnergy)) * virial * particleVirial;
+  index += isComputeParticleEnergy_int * virial * particleVirial * hybrid;
   // virial
-  index += (int(isComputeVirial)) * particleVirial;
+  index += isComputeVirial_int * particleVirial * hybrid;
   // particleVirial
-  index += (int(isComputeParticleVirial));
+  index += isComputeParticleVirial_int * hybrid;
+  // hybrid
+  index += isHybrid_int;
   return index;
 }
 
@@ -1023,8 +1843,8 @@ int SNAPImplementation::RegisterKIMParameters(KIM::ModelDriverCreate *const mode
   }
 
   ier = modelDriverCreate->SetParameterPointer(1, &switchflag, "switchflag",
-                                               "0 or 1 \n "
-                                               "0 = do not use switching function, \n "
+                                               "0 or 1\n "
+                                               "0 = do not use switching function,\n "
                                                "1 = use switching function, 'switchflag'.");
   if (ier)
   {
@@ -1033,8 +1853,8 @@ int SNAPImplementation::RegisterKIMParameters(KIM::ModelDriverCreate *const mode
   }
 
   ier = modelDriverCreate->SetParameterPointer(1, &bzeroflag, "bzeroflag",
-                                               "0 or 1 \n "
-                                               "0 = do not subtract B0, \n "
+                                               "0 or 1\n "
+                                               "0 = do not subtract B0,\n "
                                                "1 = subtract B0, 'bzeroflag'.");
   if (ier)
   {
@@ -1043,13 +1863,32 @@ int SNAPImplementation::RegisterKIMParameters(KIM::ModelDriverCreate *const mode
   }
 
   ier = modelDriverCreate->SetParameterPointer(1, &quadraticflag, "quadraticflag",
-                                               "0 or 1 \n "
-                                               "0 = do not generate quadratic terms, \n "
+                                               "0 or 1\n "
+                                               "0 = do not generate quadratic terms,\n "
                                                "1 = generate quadratic terms, 'quadraticflag'.");
   if (ier)
   {
     LOG_ERROR("SetParameterPointer quadraticflag");
     return ier;
+  }
+
+  if (nzbls)
+  {
+    ier = modelDriverCreate->SetParameterPointer(1, &inner, "inner",
+                                                 "Distance where switching function in the ZBL interaction begins.");
+    if (ier)
+    {
+      LOG_ERROR("SetParameterPointer switchflag");
+      return ier;
+    }
+
+    ier = modelDriverCreate->SetParameterPointer(1, &outer, "outer",
+                                                 "Distance Global cutoff for the ZBL interaction.");
+    if (ier)
+    {
+      LOG_ERROR("SetParameterPointer switchflag");
+      return ier;
+    }
   }
 
   // Everything is good
@@ -1230,7 +2069,8 @@ template <bool isComputeProcess_dEdr,
           bool isComputeForces,
           bool isComputeParticleEnergy,
           bool isComputeVirial,
-          bool isComputeParticleVirial>
+          bool isComputeParticleVirial,
+          bool isHybrid>
 int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute */,
                                 KIM::ModelComputeArguments const *const modelComputeArguments,
                                 int const *const particleSpeciesCodes,
@@ -1252,8 +2092,11 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
       !isComputeVirial &&
       !isComputeParticleVirial &&
       !isComputeProcess_dEdr &&
-      !isComputeProcess_d2Edr2)
+      !isComputeProcess_d2Edr2 &&
+      !isHybrid)
+  {
     return ier;
+  }
 
   // Initialize energy
   if (isComputeEnergy)
@@ -1303,243 +2146,788 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
     }
   }
 
-  int numnei = 0;
-  int const *n1atom = NULL;
-
-  // Loop over all the contributing particles
-  for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
+  if (!isHybrid)
   {
-    if (!particleContributing[i])
-      continue;
+    int numnei = 0;
+    int const *n1atom = NULL;
 
-    // Get the species index for atom i
-    int const iSpecies = particleSpeciesCodes[i];
-
-    // Get the iSpecies cutoff
-    double const radi = radelem[iSpecies];
-
-    double const xi = coordinates[i][0];
-    double const yi = coordinates[i][1];
-    double const zi = coordinates[i][2];
-
-    // Calculate contribution
-
-    // Get the neighbors
-    modelComputeArguments->GetNeighborList(0, i, &numnei, &n1atom);
-
-    // Make sure {rij, inside, wj, and rcutij} arrays are big enough for numnei atoms
-    snap->grow_rij(numnei);
-
-    // number of neighbors of I within cutoff
-    int ninside = 0;
-
-    // note Rij sign convention => dU/dRij = dU/dRj = -dU/dRi
-
-    // Setup loop over neighbors of current particle
-    for (int n = 0; n < numnei; ++n)
+    // Loop over all the contributing particles
+    for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
     {
-      // Index of the neighbor atom
-      int const j = n1atom[n];
+      if (!particleContributing[i])
+        continue;
 
-      // Get the species index for atom j
-      int const jSpecies = particleSpeciesCodes[j];
+      // Get the species index for atom i
+      int const iSpecies = particleSpeciesCodes[i];
 
-      double const dx = coordinates[j][0] - xi;
-      double const dy = coordinates[j][1] - yi;
-      double const dz = coordinates[j][2] - zi;
+      // Get the iSpecies cutoff
+      double const radi = radelem[iSpecies];
 
-      double const rsq = dx * dx + dy * dy + dz * dz;
+      double const xi = coordinates[i][0];
+      double const yi = coordinates[i][1];
+      double const zi = coordinates[i][2];
 
-      if (rsq < cutsq(iSpecies, jSpecies) && rsq > 1e-20)
+      // Calculate contribution
+
+      // Get the neighbors
+      modelComputeArguments->GetNeighborList(0, i, &numnei, &n1atom);
+
+      // Make sure {rij, inside, wj, and rcutij} arrays are big enough for numnei atoms
+      snap->grow_rij(numnei);
+
+      // number of neighbors of I within cutoff
+      int ninside = 0;
+
+      // note Rij sign convention => dU/dRij = dU/dRj = -dU/dRi
+
+      // Setup loop over neighbors of current particle
+      for (int n = 0; n < numnei; ++n)
       {
-        snap->rij(ninside, 0) = dx;
-        snap->rij(ninside, 1) = dy;
-        snap->rij(ninside, 2) = dz;
-        snap->inside[ninside] = j;
-        snap->wj[ninside] = wjelem[jSpecies];
-        // Get the pair of iSpecies & jSpecies cutoff
-        snap->rcutij[ninside] = (radi + radelem[jSpecies]) * rcutfac;
-        ++ninside;
-      }
-    }
+        // Index of the neighbor atom
+        int const j = n1atom[n];
 
-    // compute Ui, Yi for atom i
-    {
-      snap->compute_ui(ninside);
+        // Get the species index for atom j
+        int const jSpecies = particleSpeciesCodes[j];
 
-      // Get the 1D view to the 2D beta array at row i
-      auto betai = beta.data_1D(contributing_index);
+        double const dx = coordinates[j][0] - xi;
+        double const dy = coordinates[j][1] - yi;
+        double const dz = coordinates[j][2] - zi;
 
-      // Get the pointer to the beta array of data for atom i
-      double const *const bi = const_cast<double *>(betai.data());
+        double const rsq = dx * dx + dy * dy + dz * dz;
 
-      snap->compute_yi(bi);
-    }
-
-    // Compute contribution to force, etc.
-
-    // For the neighbors of particle i within the cutoff:
-    // Compute deidrj = dEi/dRj = -dEi/dRi add to Fi, subtract from Fj
-
-    VectorOfSizeDIM deidrj;
-
-    // Setup loop over neighbors of particle i
-    for (int n = 0; n < ninside; ++n)
-    {
-      // Get the 1D view to the 2D snap->rij array at row n
-      auto rij = snap->rij.data_1D(n);
-
-      // Get the pointer to the rij_const array of data
-      double const *const rij_const = const_cast<double *>(rij.data());
-
-      snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], n);
-
-      snap->compute_deidrj(deidrj);
-
-      // Index of the neighbor atom
-      int const j = snap->inside[n];
-
-      // Contribution to forces
-      if (isComputeForces)
-      {
-        forces[i][0] += deidrj[0];
-        forces[i][1] += deidrj[1];
-        forces[i][2] += deidrj[2];
-
-        forces[j][0] -= deidrj[0];
-        forces[j][1] -= deidrj[1];
-        forces[j][2] -= deidrj[2];
-      }
-
-      if (isComputeProcess_dEdr)
-      {
-        double const rrsq = std::sqrt(rij_const[0] * rij_const[0] + rij_const[1] * rij_const[1] + rij_const[2] * rij_const[2]);
-        double dedr = std::sqrt(deidrj[0] * deidrj[0] + deidrj[1] * deidrj[1] + deidrj[2] * deidrj[2]);
-        if (!particleContributing[j])
-          dedr *= 0.5;
-        ier = modelComputeArguments->ProcessDEDrTerm(dedr, rrsq, rij_const, i, j);
-        if (ier)
+        if (rsq < cutsq(iSpecies, jSpecies) && rsq > 1e-20)
         {
-          LOG_ERROR("ProcessDEDrTerm");
-          return ier;
+          snap->rij(ninside, 0) = dx;
+          snap->rij(ninside, 1) = dy;
+          snap->rij(ninside, 2) = dz;
+          snap->inside[ninside] = j;
+          snap->wj[ninside] = wjelem[jSpecies];
+          // Get the pair of iSpecies & jSpecies cutoff
+          snap->rcutij[ninside] = (radi + radelem[jSpecies]) * rcutfac;
+          ++ninside;
         }
       }
 
-      if (isComputeVirial || isComputeParticleVirial)
+      // compute Ui, Yi for atom i
       {
-        // Virial has 6 components and is stored as a 6-element
-        // vector in the following order: xx, yy, zz, yz, xz, xy.
+        snap->compute_ui(ninside);
 
-        VectorOfSizeSix v;
+        // Get the 1D view to the 2D beta array at row i
+        auto betai = beta.data_1D(contributing_index);
 
-        v[0] = rij_const[0] * deidrj[0];
-        v[1] = rij_const[1] * deidrj[1];
-        v[2] = rij_const[2] * deidrj[2];
-        v[3] = rij_const[1] * deidrj[2];
-        v[4] = rij_const[0] * deidrj[2];
-        v[5] = rij_const[0] * deidrj[1];
+        // Get the pointer to the beta array of data for atom i
+        double const *const bi = const_cast<double *>(betai.data());
 
-        if (isComputeVirial)
+        snap->compute_yi(bi);
+      }
+
+      // Compute contribution to force, etc.
+
+      // For the neighbors of particle i within the cutoff:
+      // Compute deidrj = dEi/dRj = -dEi/dRi add to Fi, subtract from Fj
+
+      VectorOfSizeDIM deidrj;
+
+      // Setup loop over neighbors of particle i
+      for (int n = 0; n < ninside; ++n)
+      {
+        // Get the 1D view to the 2D snap->rij array at row n
+        auto rij = snap->rij.data_1D(n);
+
+        // Get the pointer to the rij_const array of data
+        double const *const rij_const = const_cast<double *>(rij.data());
+
+        snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], n);
+
+        snap->compute_deidrj(deidrj);
+
+        // Index of the neighbor atom
+        int const j = snap->inside[n];
+
+        // Contribution to forces
+        if (isComputeForces)
         {
-          virial[0] += v[0];
-          virial[1] += v[1];
-          virial[2] += v[2];
-          virial[3] += v[3];
-          virial[4] += v[4];
-          virial[5] += v[5];
+          forces[i][0] += deidrj[0];
+          forces[i][1] += deidrj[1];
+          forces[i][2] += deidrj[2];
+
+          forces[j][0] -= deidrj[0];
+          forces[j][1] -= deidrj[1];
+          forces[j][2] -= deidrj[2];
         }
 
-        if (isComputeParticleVirial)
+        if (isComputeProcess_dEdr)
         {
-          v[0] *= 0.5;
-          v[1] *= 0.5;
-          v[2] *= 0.5;
-          v[3] *= 0.5;
-          v[4] *= 0.5;
-          v[5] *= 0.5;
-
-          particleVirial[i][0] += v[0];
-          particleVirial[i][1] += v[1];
-          particleVirial[i][2] += v[2];
-          particleVirial[i][3] += v[3];
-          particleVirial[i][4] += v[4];
-          particleVirial[i][5] += v[5];
-
-          particleVirial[j][0] += v[0];
-          particleVirial[j][1] += v[1];
-          particleVirial[j][2] += v[2];
-          particleVirial[j][3] += v[3];
-          particleVirial[j][4] += v[4];
-          particleVirial[j][5] += v[5];
-        } // isComputeParticleVirial
-      }   // isComputeVirial || isComputeParticleVirial
-    }     // End of loop over neighbors of particle i
-
-    // Energy contribution
-    if (isComputeEnergy || isComputeParticleEnergy)
-    {
-      // Compute contribution to energy.
-
-      // Energy of particle i, sum over coeffs_k * Bi_k
-
-      // Get the 1D view to the 2D coeffelem array at row iSpecies
-      auto coeffi = coeffelem.data_1D(iSpecies);
-
-      // Compute phi
-      double phi = coeffi[0];
-
-      // Get the pointer to the raw data + 1 to avoid extra summation
-      double *Ci = coeffi.data() + 1;
-
-      // Get the bispectrum of particle i
-      // Get the 1D view to the 2D bispectrum array at row i
-      auto Bi = bispectrum.data_1D(contributing_index);
-
-      // E = beta.B + 0.5*B^t.alpha.B
-
-      // Linear contributions
-      for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
-        phi += Ci[icoeff] * Bi[icoeff];
-
-      // Quadratic contributions
-      if (quadraticflag)
-      {
-        // Get the pointer to the start of coeffi array of data
-        --Ci;
-
-        int k = ncoeff + 1;
-
-        for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
-        {
-          double const bveci = Bi[icoeff];
-
-          phi += 0.5 * Ci[k++] * bveci * bveci;
-
-          for (int jcoeff = icoeff + 1; jcoeff < ncoeff; ++jcoeff)
+          double const rrsq = std::sqrt(rij_const[0] * rij_const[0] + rij_const[1] * rij_const[1] + rij_const[2] * rij_const[2]);
+          double const dedr = std::sqrt(deidrj[0] * deidrj[0] + deidrj[1] * deidrj[1] + deidrj[2] * deidrj[2]);
+          ier = modelComputeArguments->ProcessDEDrTerm(dedr, rrsq, rij_const, i, j);
+          if (ier)
           {
-            double const bvecj = Bi[jcoeff];
-
-            phi += Ci[k++] * bveci * bvecj;
+            LOG_ERROR("ProcessDEDrTerm");
+            return ier;
           }
         }
-      } // quadraticflag
 
-      // Contribution to energy
-      if (isComputeEnergy)
+        if (isComputeVirial || isComputeParticleVirial)
+        {
+          // Virial has 6 components and is stored as a 6-element
+          // vector in the following order: xx, yy, zz, yz, xz, xy.
+
+          VectorOfSizeSix v;
+
+          v[0] = rij_const[0] * deidrj[0];
+          v[1] = rij_const[1] * deidrj[1];
+          v[2] = rij_const[2] * deidrj[2];
+          v[3] = rij_const[1] * deidrj[2];
+          v[4] = rij_const[0] * deidrj[2];
+          v[5] = rij_const[0] * deidrj[1];
+
+          if (isComputeVirial)
+          {
+            virial[0] += v[0];
+            virial[1] += v[1];
+            virial[2] += v[2];
+            virial[3] += v[3];
+            virial[4] += v[4];
+            virial[5] += v[5];
+          }
+
+          if (isComputeParticleVirial)
+          {
+            v[0] *= 0.5;
+            v[1] *= 0.5;
+            v[2] *= 0.5;
+            v[3] *= 0.5;
+            v[4] *= 0.5;
+            v[5] *= 0.5;
+
+            particleVirial[i][0] += v[0];
+            particleVirial[i][1] += v[1];
+            particleVirial[i][2] += v[2];
+            particleVirial[i][3] += v[3];
+            particleVirial[i][4] += v[4];
+            particleVirial[i][5] += v[5];
+
+            particleVirial[j][0] += v[0];
+            particleVirial[j][1] += v[1];
+            particleVirial[j][2] += v[2];
+            particleVirial[j][3] += v[3];
+            particleVirial[j][4] += v[4];
+            particleVirial[j][5] += v[5];
+          } // isComputeParticleVirial
+        }   // isComputeVirial || isComputeParticleVirial
+      }     // End of loop over neighbors of particle i
+
+      // Energy contribution
+      if (isComputeEnergy || isComputeParticleEnergy)
       {
-        *energy += phi;
+        // Compute contribution to energy.
+
+        // Energy of particle i, sum over coeffs_k * Bi_k
+
+        // Get the 1D view to the 2D coeffelem array at row iSpecies
+        auto coeffi = coeffelem.data_1D(iSpecies);
+
+        // Compute phi
+        double phi = coeffi[0];
+
+        // Get the pointer to the raw data + 1 to avoid extra summation
+        double *Ci = coeffi.data() + 1;
+
+        // Get the bispectrum of particle i
+        // Get the 1D view to the 2D bispectrum array at row i
+        auto Bi = bispectrum.data_1D(contributing_index);
+
+        // E = beta.B + 0.5*B^t.alpha.B
+
+        // Linear contributions
+        for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
+          phi += Ci[icoeff] * Bi[icoeff];
+
+        // Quadratic contributions
+        if (quadraticflag)
+        {
+          // Get the pointer to the start of coeffi array of data
+          --Ci;
+
+          int k = ncoeff + 1;
+
+          for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
+          {
+            double const bveci = Bi[icoeff];
+
+            phi += 0.5 * Ci[k++] * bveci * bveci;
+
+            for (int jcoeff = icoeff + 1; jcoeff < ncoeff; ++jcoeff)
+            {
+              double const bvecj = Bi[jcoeff];
+
+              phi += Ci[k++] * bveci * bvecj;
+            }
+          }
+        } // quadraticflag
+
+        // Contribution to energy
+        if (isComputeEnergy)
+        {
+          *energy += phi;
+        }
+
+        // Contribution to particleEnergy
+        if (isComputeParticleEnergy)
+        {
+          particleEnergy[i] += phi;
+        }
+      } // isComputeEnergy || isComputeParticleEnergy
+
+      ++contributing_index;
+
+    } // End of loop over contributing particles
+  }   // If it is not a hybrid style
+
+  // If it is a hybrid style
+  if (isHybrid)
+  {
+    int numnei = 0;
+    int const *n1atom = NULL;
+
+    double dEidr_ZBL;
+    double dEidrByR_ZBL;
+    double dEidrByR_TABLE;
+    double a;
+    double b;
+    double fraction;
+    int itable;
+
+    TABLE *tb;
+    union_int_float_t rsq_lookup;
+
+    // Loop over all the contributing particles
+    for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
+    {
+      if (!particleContributing[i])
+        continue;
+
+      // Get the species index for atom i
+      int const iSpecies = particleSpeciesCodes[i];
+
+      // Get the iSpecies cutoff
+      double const radi = radelem[iSpecies];
+
+      double const xi = coordinates[i][0];
+      double const yi = coordinates[i][1];
+      double const zi = coordinates[i][2];
+
+      // Calculate contribution
+
+      // Get the neighbors
+      modelComputeArguments->GetNeighborList(0, i, &numnei, &n1atom);
+
+      // Make sure {rij, inside, wj, and rcutij} arrays are big enough for numnei atoms
+      snap->grow_rij(numnei);
+
+      // number of neighbors of I within cutoff
+      int ninside = 0;
+
+      // note Rij sign convention => dU/dRij = dU/dRj = -dU/dRi
+
+      // Setup loop over neighbors of current particle
+      for (int n = 0; n < numnei; ++n)
+      {
+        // Index of the neighbor atom
+        int const j = n1atom[n];
+
+        // Get the species index for atom j
+        int const jSpecies = particleSpeciesCodes[j];
+
+        double const dx = coordinates[j][0] - xi;
+        double const dy = coordinates[j][1] - yi;
+        double const dz = coordinates[j][2] - zi;
+
+        double const rsq = dx * dx + dy * dy + dz * dz;
+
+        if (rsq < cutsq(iSpecies, jSpecies) && rsq > 1e-20)
+        {
+          snap->rij(ninside, 0) = dx;
+          snap->rij(ninside, 1) = dy;
+          snap->rij(ninside, 2) = dz;
+          snap->inside[ninside] = j;
+          snap->wj[ninside] = wjelem[jSpecies];
+          // Get the pair of iSpecies & jSpecies cutoff
+          snap->rcutij[ninside] = (radi + radelem[jSpecies]) * rcutfac;
+          ++ninside;
+        }
+        else
+        {
+          int const n_ = numnei - n - 1;
+          snap->rij(n_, 0) = dx;
+          snap->rij(n_, 1) = dy;
+          snap->rij(n_, 2) = dz;
+          snap->inside[n_] = j;
+        }
       }
 
-      // Contribution to particleEnergy
-      if (isComputeParticleEnergy)
+      // compute Ui, Yi for atom i
       {
-        particleEnergy[i] += phi;
+        snap->compute_ui(ninside);
+
+        // Get the 1D view to the 2D beta array at row i
+        auto betai = beta.data_1D(contributing_index);
+
+        // Get the pointer to the beta array of data for atom i
+        double const *const bi = const_cast<double *>(betai.data());
+
+        snap->compute_yi(bi);
       }
-    } // isComputeEnergy || isComputeParticleEnergy
 
-    ++contributing_index;
+      // Compute contribution to force, etc.
 
-  } // End of loop over contributing particles
+      // For the neighbors of particle i within the cutoff:
+      // Compute deidrj = dEi/dRj = -dEi/dRi add to Fi, subtract from Fj
+
+      VectorOfSizeDIM deidrj;
+
+      // Setup loop over neighbors of particle i
+      for (int n = 0; n < numnei; ++n)
+      {
+        // Index of the neighbor atom
+        int const j = snap->inside[n];
+
+        // Get the species index for atom j
+        int const jSpecies = particleSpeciesCodes[j];
+
+        // If particle j is contributing or not
+        int const jContrib = particleContributing[j];
+
+        bool const lsnap = n < ninside;
+        bool const lhalf = !(jContrib && (j < i));
+
+        if (!lsnap)
+        {
+          if (!lhalf)
+          {
+            continue;
+          }
+          if (setflag(iSpecies, jSpecies) == static_cast<int>(HYBRIDSTYLE::NONE))
+          {
+            continue;
+          }
+        }
+
+        bool lzbl = lhalf ? (setflag(iSpecies, jSpecies) == static_cast<int>(HYBRIDSTYLE::ZBL)) : false;
+        bool ltable = lhalf ? (setflag(iSpecies, jSpecies) == static_cast<int>(HYBRIDSTYLE::TABLE)) : false;
+        if (ltable)
+        {
+          tb = &tables[tableNumber(iSpecies, jSpecies)];
+        }
+
+        // Get the 1D view to the 2D snap->rij array at row n
+        auto rij = snap->rij.data_1D(n);
+
+        // Get the pointer to the rij_const array of data
+        double const *const rij_const = const_cast<double *>(rij.data());
+
+        double const rsq = rij_const[0] * rij_const[0] + rij_const[1] * rij_const[1] + rij_const[2] * rij_const[2];
+        double const rrsq = std::sqrt(rsq);
+
+        if (lzbl)
+        {
+          lzbl = (rsq < zbl->cut_globalsq);
+        }
+
+        if (ltable)
+        {
+          ltable = (rrsq < tb->cut) ? (rsq > tb->innersq) : false;
+        }
+
+        if (lsnap)
+        {
+          snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], n);
+
+          snap->compute_deidrj(deidrj);
+        }
+
+        if (lzbl)
+        {
+          dEidr_ZBL = 0.0;
+          dEidrByR_ZBL = 0.0;
+
+          // Compute dphi
+          if (isComputeForces ||
+              isComputeProcess_dEdr ||
+              isComputeVirial ||
+              isComputeParticleVirial)
+          {
+            dEidr_ZBL = zbl->dzbldr(rrsq, iSpecies, jSpecies);
+
+            double const t = rrsq - zbl->cut_inner;
+
+            if (rsq > zbl->cut_innersq)
+            {
+              double const fswitch = t * t * (zbl->sw1(iSpecies, jSpecies) + zbl->sw2(iSpecies, jSpecies) * t);
+              dEidr_ZBL += fswitch;
+            }
+
+            if (!jContrib)
+            {
+              dEidr_ZBL *= 0.5;
+            }
+
+            dEidrByR_ZBL = dEidr_ZBL / rrsq;
+          }
+        }
+
+        if (ltable)
+        {
+          dEidrByR_TABLE = 0.0;
+
+          int const tlm1 = tb->tableLength - 1;
+
+          if (tb->tableStyle == TABLESTYLE::LOOKUP)
+          {
+            itable = static_cast<int>((rsq - tb->innersq) * tb->invdelta);
+            if (itable >= tlm1)
+            {
+              LOG_ERROR("Pair distance (" +
+                        std::to_string(rrsq) +
+                        ") > table outer cutoff between types (" +
+                        hybridStyleSpeciesNames[iSpecies] +
+                        ", " +
+                        hybridStyleSpeciesNames[jSpecies] + ")");
+              return true;
+            }
+            dEidrByR_TABLE = tb->f[itable];
+          }
+          else if (tb->tableStyle == TABLESTYLE::LINEAR)
+          {
+            itable = static_cast<int>((rsq - tb->innersq) * tb->invdelta);
+            if (itable >= tlm1)
+            {
+              LOG_ERROR("Pair distance (" +
+                        std::to_string(rrsq) +
+                        ") > table outer cutoff between types (" +
+                        hybridStyleSpeciesNames[iSpecies] +
+                        ", " +
+                        hybridStyleSpeciesNames[jSpecies] + ")");
+              return true;
+            }
+            fraction = (rsq - tb->rsq[itable]) * tb->invdelta;
+            dEidrByR_TABLE = tb->f[itable] + fraction * tb->df[itable];
+          }
+          else if (tb->tableStyle == TABLESTYLE::SPLINE)
+          {
+            itable = static_cast<int>((rsq - tb->innersq) * tb->invdelta);
+            if (itable >= tlm1)
+            {
+              LOG_ERROR("Pair distance (" +
+                        std::to_string(rrsq) +
+                        ") > table outer cutoff between types (" +
+                        hybridStyleSpeciesNames[iSpecies] +
+                        ", " +
+                        hybridStyleSpeciesNames[jSpecies] + ")");
+              return true;
+            }
+            b = (rsq - tb->rsq[itable]) * tb->invdelta;
+            a = 1.0 - b;
+            dEidrByR_TABLE = a * tb->f[itable] + b * tb->f[itable + 1] + ((a * a * a - a) * tb->f2[itable] + (b * b * b - b) * tb->f2[itable + 1]) * tb->deltasq6;
+          }
+          else if (tb->tableStyle == TABLESTYLE::BITMAP)
+          {
+            rsq_lookup.f = rsq;
+            itable = rsq_lookup.i & tb->nmask;
+            itable >>= tb->nshiftbits;
+            fraction = (rsq_lookup.f - tb->rsq[itable]) * tb->drsq[itable];
+            dEidrByR_TABLE = tb->f[itable] + fraction * tb->df[itable];
+          }
+
+          dEidrByR_TABLE *= jContrib ? -1.0 : -0.5;
+        }
+
+        // Contribution to forces
+        if (isComputeForces)
+        {
+          if (lsnap)
+          {
+            forces[i][0] += deidrj[0];
+            forces[i][1] += deidrj[1];
+            forces[i][2] += deidrj[2];
+
+            forces[j][0] -= deidrj[0];
+            forces[j][1] -= deidrj[1];
+            forces[j][2] -= deidrj[2];
+          }
+
+          if (lzbl)
+          {
+            forces[i][0] += dEidrByR_ZBL * rij_const[0];
+            forces[i][1] += dEidrByR_ZBL * rij_const[1];
+            forces[i][2] += dEidrByR_ZBL * rij_const[2];
+
+            forces[j][0] -= dEidrByR_ZBL * rij_const[0];
+            forces[j][1] -= dEidrByR_ZBL * rij_const[1];
+            forces[j][2] -= dEidrByR_ZBL * rij_const[2];
+          }
+
+          if (ltable)
+          {
+            forces[i][0] += dEidrByR_TABLE * rij_const[0];
+            forces[i][1] += dEidrByR_TABLE * rij_const[1];
+            forces[i][2] += dEidrByR_TABLE * rij_const[2];
+
+            forces[j][0] -= dEidrByR_TABLE * rij_const[0];
+            forces[j][1] -= dEidrByR_TABLE * rij_const[1];
+            forces[j][2] -= dEidrByR_TABLE * rij_const[2];
+          }
+        }
+
+        if (isComputeEnergy || isComputeParticleEnergy)
+        {
+          if (lzbl)
+          {
+            double phi = zbl->e_zbl(rrsq, iSpecies, jSpecies);
+
+            phi += zbl->sw5(iSpecies, jSpecies);
+
+            if (rsq > zbl->cut_innersq)
+            {
+              double const eswitch = t * t * t * (zbl->sw3(iSpecies, jSpecies) + zbl->sw4(iSpecies, jSpecies) * t);
+              phi += eswitch;
+            }
+
+            if (isComputeEnergy)
+            {
+              if (jContrib)
+              {
+                *energy += phi;
+              }
+              else
+              {
+                *energy += 0.5 * phi;
+              }
+            }
+
+            if (isComputeParticleEnergy)
+            {
+              particleEnergy[i] += 0.5 * phi;
+              if (jContrib)
+              {
+                particleEnergy[j] += 0.5 * phi;
+              }
+            }
+          }
+
+          if (ltable)
+          {
+            double phi(0.0);
+
+            if (tb->tableStyle == TABLESTYLE::LOOKUP)
+            {
+              phi = tb->e[itable];
+            }
+            else if (tb->tableStyle == TABLESTYLE::LINEAR)
+            {
+              phi = tb->e[itable] + fraction * tb->de[itable];
+            }
+            else if (tb->tableStyle == TABLESTYLE::SPLINE)
+            {
+              phi = a * tb->e[itable] +
+                    b * tb->e[itable + 1] +
+                    ((a * a * a - a) * tb->e2[itable] +
+                     (b * b * b - b) * tb->e2[itable + 1]) *
+                        tb->deltasq6;
+            }
+            else if (tb->tableStyle == TABLESTYLE::BITMAP)
+            {
+              phi = tb->e[itable] + fraction * tb->de[itable];
+            }
+
+            if (isComputeEnergy)
+            {
+              *energy += jContrib ? phi : 0.5 * phi;
+            }
+
+            if (isComputeParticleEnergy)
+            {
+              particleEnergy[i] += 0.5 * phi;
+              if (jContrib)
+              {
+                particleEnergy[j] += 0.5 * phi;
+              }
+            }
+          }
+        }
+
+        if (isComputeProcess_dEdr)
+        {
+          double dedr = lsnap ? std::sqrt(deidrj[0] * deidrj[0] + deidrj[1] * deidrj[1] + deidrj[2] * deidrj[2]) : 0.0;
+
+          if (lzbl)
+          {
+            dedr += dEidr_ZBL;
+          }
+
+          if (ltable)
+          {
+            dedr += dEidrByR_TABLE * rrsq;
+          }
+
+          ier = modelComputeArguments->ProcessDEDrTerm(dedr, rrsq, rij_const, i, j);
+          if (ier)
+          {
+            LOG_ERROR("ProcessDEDrTerm");
+            return ier;
+          }
+        }
+
+        if (isComputeVirial || isComputeParticleVirial)
+        {
+          // Virial has 6 components and is stored as a 6-element
+          // vector in the following order: xx, yy, zz, yz, xz, xy.
+
+          VectorOfSizeSix v;
+
+          if (lsnap)
+          {
+            v[0] = rij_const[0] * deidrj[0];
+            v[1] = rij_const[1] * deidrj[1];
+            v[2] = rij_const[2] * deidrj[2];
+            v[3] = rij_const[1] * deidrj[2];
+            v[4] = rij_const[0] * deidrj[2];
+            v[5] = rij_const[0] * deidrj[1];
+          }
+          else
+          {
+            v[0] = 0.0;
+            v[1] = 0.0;
+            v[2] = 0.0;
+            v[3] = 0.0;
+            v[4] = 0.0;
+            v[5] = 0.0;
+          }
+
+          if (lzbl)
+          {
+            v[0] += rij_const[0] * rij_const[0] * dEidrByR_ZBL;
+            v[1] += rij_const[1] * rij_const[1] * dEidrByR_ZBL;
+            v[2] += rij_const[2] * rij_const[2] * dEidrByR_ZBL;
+            v[3] += rij_const[1] * rij_const[2] * dEidrByR_ZBL;
+            v[4] += rij_const[0] * rij_const[2] * dEidrByR_ZBL;
+            v[5] += rij_const[0] * rij_const[1] * dEidrByR_ZBL;
+          }
+
+          if (ltable)
+          {
+            v[0] += rij_const[0] * rij_const[0] * dEidrByR_TABLE;
+            v[1] += rij_const[1] * rij_const[1] * dEidrByR_TABLE;
+            v[2] += rij_const[2] * rij_const[2] * dEidrByR_TABLE;
+            v[3] += rij_const[1] * rij_const[2] * dEidrByR_TABLE;
+            v[4] += rij_const[0] * rij_const[2] * dEidrByR_TABLE;
+            v[5] += rij_const[0] * rij_const[1] * dEidrByR_TABLE;
+          }
+
+          if (isComputeVirial)
+          {
+            virial[0] += v[0];
+            virial[1] += v[1];
+            virial[2] += v[2];
+            virial[3] += v[3];
+            virial[4] += v[4];
+            virial[5] += v[5];
+          }
+
+          if (isComputeParticleVirial)
+          {
+            v[0] *= 0.5;
+            v[1] *= 0.5;
+            v[2] *= 0.5;
+            v[3] *= 0.5;
+            v[4] *= 0.5;
+            v[5] *= 0.5;
+
+            particleVirial[i][0] += v[0];
+            particleVirial[i][1] += v[1];
+            particleVirial[i][2] += v[2];
+            particleVirial[i][3] += v[3];
+            particleVirial[i][4] += v[4];
+            particleVirial[i][5] += v[5];
+
+            particleVirial[j][0] += v[0];
+            particleVirial[j][1] += v[1];
+            particleVirial[j][2] += v[2];
+            particleVirial[j][3] += v[3];
+            particleVirial[j][4] += v[4];
+            particleVirial[j][5] += v[5];
+
+          } // isComputeParticleVirial
+        }   // isComputeVirial || isComputeParticleVirial
+      }     // End of loop over neighbors of particle i
+
+      // Energy contribution
+      if (isComputeEnergy || isComputeParticleEnergy)
+      {
+        // Compute contribution to energy.
+
+        // Energy of particle i, sum over coeffs_k * Bi_k
+
+        // Get the 1D view to the 2D coeffelem array at row iSpecies
+        auto coeffi = coeffelem.data_1D(iSpecies);
+
+        // Compute phi
+        double phi = coeffi[0];
+
+        // Get the pointer to the raw data + 1 to avoid extra summation
+        double *Ci = coeffi.data() + 1;
+
+        // Get the bispectrum of particle i
+        // Get the 1D view to the 2D bispectrum array at row i
+        auto Bi = bispectrum.data_1D(contributing_index);
+
+        // E = beta.B + 0.5*B^t.alpha.B
+
+        // Linear contributions
+        for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
+          phi += Ci[icoeff] * Bi[icoeff];
+
+        // Quadratic contributions
+        if (quadraticflag)
+        {
+          // Get the pointer to the start of coeffi array of data
+          --Ci;
+
+          int k = ncoeff + 1;
+
+          for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
+          {
+            double const bveci = Bi[icoeff];
+
+            phi += 0.5 * Ci[k++] * bveci * bveci;
+
+            for (int jcoeff = icoeff + 1; jcoeff < ncoeff; ++jcoeff)
+            {
+              double const bvecj = Bi[jcoeff];
+
+              phi += Ci[k++] * bveci * bvecj;
+            }
+          }
+        } // quadraticflag
+
+        // Contribution to energy
+        if (isComputeEnergy)
+        {
+          *energy += phi;
+        }
+
+        // Contribution to particleEnergy
+        if (isComputeParticleEnergy)
+        {
+          particleEnergy[i] += phi;
+        }
+      } // isComputeEnergy || isComputeParticleEnergy
+
+      ++contributing_index;
+
+    } // End of loop over contributing particles
+  }   // If it is not a hybrid style
 
   // everything is good
   return false;
