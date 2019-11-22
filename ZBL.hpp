@@ -175,13 +175,15 @@ public:
   /*! Global cutoff square for ZBL interaction */
   double cut_globalsq;
 
-public:
+private:
   Array2D<double> d1a;
   Array2D<double> d2a;
   Array2D<double> d3a;
   Array2D<double> d4a;
+
   Array2D<double> zze;
 
+public:
   Array2D<double> sw1;
   Array2D<double> sw2;
   Array2D<double> sw3;
