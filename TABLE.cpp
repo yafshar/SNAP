@@ -251,6 +251,7 @@ void TABLE::GetNextDataLine(std::FILE *const filePtr,
                             int const maxSize,
                             int *endOfFileFlag)
 {
+  *endOfFileFlag = 0;
   do
   {
     if (!std::fgets(nextLinePtr, maxSize, filePtr))
@@ -283,7 +284,7 @@ int TABLE::read_table(std::FILE *const filePointers, char const *keyword)
 
   char nextLine[MAXLINE];
 
-  int endOfFileFlag(0);
+  int endOfFileFlag;
 
   // Loop until section found with matching keyword
   while (1)
