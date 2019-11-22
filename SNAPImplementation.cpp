@@ -2147,251 +2147,9 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
     }
   }
 
-  if (!isHybrid)
-  {
-    int numnei = 0;
-    int const *n1atom = NULL;
-
-    // Loop over all the contributing particles
-    for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
-    {
-      if (!particleContributing[i])
-        continue;
-
-      // Get the species index for atom i
-      int const iSpecies = particleSpeciesCodes[i];
-
-      // Get the iSpecies cutoff
-      double const radi = radelem[iSpecies];
-
-      double const xi = coordinates[i][0];
-      double const yi = coordinates[i][1];
-      double const zi = coordinates[i][2];
-
-      // Calculate contribution
-
-      // Get the neighbors
-      modelComputeArguments->GetNeighborList(0, i, &numnei, &n1atom);
-
-      // Make sure {rij, inside, wj, and rcutij} arrays are big enough for numnei atoms
-      snap->grow_rij(numnei);
-
-      // number of neighbors of I within cutoff
-      int ninside = 0;
-
-      // note Rij sign convention => dU/dRij = dU/dRj = -dU/dRi
-
-      // Setup loop over neighbors of current particle
-      for (int n = 0; n < numnei; ++n)
-      {
-        // Index of the neighbor atom
-        int const j = n1atom[n];
-
-        // Get the species index for atom j
-        int const jSpecies = particleSpeciesCodes[j];
-
-        double const dx = coordinates[j][0] - xi;
-        double const dy = coordinates[j][1] - yi;
-        double const dz = coordinates[j][2] - zi;
-
-        double const rsq = dx * dx + dy * dy + dz * dz;
-
-        if (rsq < cutsq(iSpecies, jSpecies) && rsq > 1e-20)
-        {
-          snap->rij(ninside, 0) = dx;
-          snap->rij(ninside, 1) = dy;
-          snap->rij(ninside, 2) = dz;
-          snap->inside[ninside] = j;
-          snap->wj[ninside] = wjelem[jSpecies];
-          // Get the pair of iSpecies & jSpecies cutoff
-          snap->rcutij[ninside] = (radi + radelem[jSpecies]) * rcutfac;
-          ++ninside;
-        }
-      }
-
-      // compute Ui, Yi for atom i
-      {
-        snap->compute_ui(ninside);
-
-        // Get the 1D view to the 2D beta array at row i
-        auto betai = beta.data_1D(contributing_index);
-
-        // Get the pointer to the beta array of data for atom i
-        double const *const bi = const_cast<double *>(betai.data());
-
-        snap->compute_yi(bi);
-      }
-
-      // Compute contribution to force, etc.
-
-      // For the neighbors of particle i within the cutoff:
-      // Compute deidrj = dEi/dRj = -dEi/dRi add to Fi, subtract from Fj
-
-      VectorOfSizeDIM deidrj;
-
-      // Setup loop over neighbors of particle i
-      for (int n = 0; n < ninside; ++n)
-      {
-        // Get the 1D view to the 2D snap->rij array at row n
-        auto rij = snap->rij.data_1D(n);
-
-        // Get the pointer to the rij_const array of data
-        double const *const rij_const = const_cast<double *>(rij.data());
-
-        snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], n);
-
-        snap->compute_deidrj(deidrj);
-
-        // Index of the neighbor atom
-        int const j = snap->inside[n];
-
-        // Contribution to forces
-        if (isComputeForces)
-        {
-          forces[i][0] += deidrj[0];
-          forces[i][1] += deidrj[1];
-          forces[i][2] += deidrj[2];
-
-          forces[j][0] -= deidrj[0];
-          forces[j][1] -= deidrj[1];
-          forces[j][2] -= deidrj[2];
-        }
-
-        if (isComputeProcess_dEdr)
-        {
-          double const rrsq = std::sqrt(rij_const[0] * rij_const[0] + rij_const[1] * rij_const[1] + rij_const[2] * rij_const[2]);
-          double const dedr = std::sqrt(deidrj[0] * deidrj[0] + deidrj[1] * deidrj[1] + deidrj[2] * deidrj[2]);
-          ier = modelComputeArguments->ProcessDEDrTerm(dedr, rrsq, rij_const, i, j);
-          if (ier)
-          {
-            LOG_ERROR("ProcessDEDrTerm");
-            return ier;
-          }
-        }
-
-        if (isComputeVirial || isComputeParticleVirial)
-        {
-          // Virial has 6 components and is stored as a 6-element
-          // vector in the following order: xx, yy, zz, yz, xz, xy.
-
-          VectorOfSizeSix v;
-
-          v[0] = rij_const[0] * deidrj[0];
-          v[1] = rij_const[1] * deidrj[1];
-          v[2] = rij_const[2] * deidrj[2];
-          v[3] = rij_const[1] * deidrj[2];
-          v[4] = rij_const[0] * deidrj[2];
-          v[5] = rij_const[0] * deidrj[1];
-
-          if (isComputeVirial)
-          {
-            virial[0] += v[0];
-            virial[1] += v[1];
-            virial[2] += v[2];
-            virial[3] += v[3];
-            virial[4] += v[4];
-            virial[5] += v[5];
-          }
-
-          if (isComputeParticleVirial)
-          {
-            v[0] *= 0.5;
-            v[1] *= 0.5;
-            v[2] *= 0.5;
-            v[3] *= 0.5;
-            v[4] *= 0.5;
-            v[5] *= 0.5;
-
-            particleVirial[i][0] += v[0];
-            particleVirial[i][1] += v[1];
-            particleVirial[i][2] += v[2];
-            particleVirial[i][3] += v[3];
-            particleVirial[i][4] += v[4];
-            particleVirial[i][5] += v[5];
-
-            particleVirial[j][0] += v[0];
-            particleVirial[j][1] += v[1];
-            particleVirial[j][2] += v[2];
-            particleVirial[j][3] += v[3];
-            particleVirial[j][4] += v[4];
-            particleVirial[j][5] += v[5];
-          } // isComputeParticleVirial
-        }   // isComputeVirial || isComputeParticleVirial
-      }     // End of loop over neighbors of particle i
-
-      // Energy contribution
-      if (isComputeEnergy || isComputeParticleEnergy)
-      {
-        // Compute contribution to energy.
-
-        // Energy of particle i, sum over coeffs_k * Bi_k
-
-        // Get the 1D view to the 2D coeffelem array at row iSpecies
-        auto coeffi = coeffelem.data_1D(iSpecies);
-
-        // Compute phi
-        double phi = coeffi[0];
-
-        // Get the pointer to the raw data + 1 to avoid extra summation
-        double *Ci = coeffi.data() + 1;
-
-        // Get the bispectrum of particle i
-        // Get the 1D view to the 2D bispectrum array at row i
-        auto Bi = bispectrum.data_1D(contributing_index);
-
-        // E = beta.B + 0.5*B^t.alpha.B
-
-        // Linear contributions
-        for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
-          phi += Ci[icoeff] * Bi[icoeff];
-
-        // Quadratic contributions
-        if (quadraticflag)
-        {
-          // Get the pointer to the start of coeffi array of data
-          --Ci;
-
-          int k = ncoeff + 1;
-
-          for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
-          {
-            double const bveci = Bi[icoeff];
-
-            phi += 0.5 * Ci[k++] * bveci * bveci;
-
-            for (int jcoeff = icoeff + 1; jcoeff < ncoeff; ++jcoeff)
-            {
-              double const bvecj = Bi[jcoeff];
-
-              phi += Ci[k++] * bveci * bvecj;
-            }
-          }
-        } // quadraticflag
-
-        // Contribution to energy
-        if (isComputeEnergy)
-        {
-          *energy += phi;
-        }
-
-        // Contribution to particleEnergy
-        if (isComputeParticleEnergy)
-        {
-          particleEnergy[i] += phi;
-        }
-      } // isComputeEnergy || isComputeParticleEnergy
-
-      ++contributing_index;
-
-    } // End of loop over contributing particles
-  }   // If it is not a hybrid style
-
   // If it is a hybrid style
   if (isHybrid)
   {
-    int numnei = 0;
-    int const *n1atom = NULL;
-
     double dEidr_ZBL;
     double dEidrByR_ZBL;
     double dEidrByR_TABLE;
@@ -2402,6 +2160,9 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
 
     TABLE const *tb;
     union_int_float_t rsq_lookup;
+
+    int numnei = 0;
+    int const *n1atom = NULL;
 
     // Loop over all the contributing particles
     for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
@@ -2550,9 +2311,6 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
 
         if (lzbl)
         {
-          dEidr_ZBL = 0.0;
-          dEidrByR_ZBL = 0.0;
-
           // Compute dphi
           if (isComputeForces ||
               isComputeProcess_dEdr ||
@@ -2574,6 +2332,11 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
             }
 
             dEidrByR_ZBL = dEidr_ZBL / rrsq;
+          }
+          else
+          {
+            dEidr_ZBL = 0.0;
+            dEidrByR_ZBL = 0.0;
           }
         }
 
@@ -2859,6 +2622,245 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
             particleVirial[j][4] += v[4];
             particleVirial[j][5] += v[5];
 
+          } // isComputeParticleVirial
+        }   // isComputeVirial || isComputeParticleVirial
+      }     // End of loop over neighbors of particle i
+
+      // Energy contribution
+      if (isComputeEnergy || isComputeParticleEnergy)
+      {
+        // Compute contribution to energy.
+
+        // Energy of particle i, sum over coeffs_k * Bi_k
+
+        // Get the 1D view to the 2D coeffelem array at row iSpecies
+        auto coeffi = coeffelem.data_1D(iSpecies);
+
+        // Compute phi
+        double phi = coeffi[0];
+
+        // Get the pointer to the raw data + 1 to avoid extra summation
+        double *Ci = coeffi.data() + 1;
+
+        // Get the bispectrum of particle i
+        // Get the 1D view to the 2D bispectrum array at row i
+        auto Bi = bispectrum.data_1D(contributing_index);
+
+        // E = beta.B + 0.5*B^t.alpha.B
+
+        // Linear contributions
+        for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
+          phi += Ci[icoeff] * Bi[icoeff];
+
+        // Quadratic contributions
+        if (quadraticflag)
+        {
+          // Get the pointer to the start of coeffi array of data
+          --Ci;
+
+          int k = ncoeff + 1;
+
+          for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
+          {
+            double const bveci = Bi[icoeff];
+
+            phi += 0.5 * Ci[k++] * bveci * bveci;
+
+            for (int jcoeff = icoeff + 1; jcoeff < ncoeff; ++jcoeff)
+            {
+              double const bvecj = Bi[jcoeff];
+
+              phi += Ci[k++] * bveci * bvecj;
+            }
+          }
+        } // quadraticflag
+
+        // Contribution to energy
+        if (isComputeEnergy)
+        {
+          *energy += phi;
+        }
+
+        // Contribution to particleEnergy
+        if (isComputeParticleEnergy)
+        {
+          particleEnergy[i] += phi;
+        }
+      } // isComputeEnergy || isComputeParticleEnergy
+
+      ++contributing_index;
+
+    } // End of loop over contributing particles
+  }   // If it is a hybrid style
+  else
+  // If it is not a hybrid style
+  {
+    int numnei = 0;
+    int const *n1atom = NULL;
+
+    // Loop over all the contributing particles
+    for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
+    {
+      if (!particleContributing[i])
+        continue;
+
+      // Get the species index for atom i
+      int const iSpecies = particleSpeciesCodes[i];
+
+      // Get the iSpecies cutoff
+      double const radi = radelem[iSpecies];
+
+      double const xi = coordinates[i][0];
+      double const yi = coordinates[i][1];
+      double const zi = coordinates[i][2];
+
+      // Calculate contribution
+
+      // Get the neighbors
+      modelComputeArguments->GetNeighborList(0, i, &numnei, &n1atom);
+
+      // Make sure {rij, inside, wj, and rcutij} arrays are big enough for numnei atoms
+      snap->grow_rij(numnei);
+
+      // number of neighbors of I within cutoff
+      int ninside = 0;
+
+      // note Rij sign convention => dU/dRij = dU/dRj = -dU/dRi
+
+      // Setup loop over neighbors of current particle
+      for (int n = 0; n < numnei; ++n)
+      {
+        // Index of the neighbor atom
+        int const j = n1atom[n];
+
+        // Get the species index for atom j
+        int const jSpecies = particleSpeciesCodes[j];
+
+        double const dx = coordinates[j][0] - xi;
+        double const dy = coordinates[j][1] - yi;
+        double const dz = coordinates[j][2] - zi;
+
+        double const rsq = dx * dx + dy * dy + dz * dz;
+
+        if (rsq < cutsq(iSpecies, jSpecies) && rsq > 1e-20)
+        {
+          snap->rij(ninside, 0) = dx;
+          snap->rij(ninside, 1) = dy;
+          snap->rij(ninside, 2) = dz;
+          snap->inside[ninside] = j;
+          snap->wj[ninside] = wjelem[jSpecies];
+          // Get the pair of iSpecies & jSpecies cutoff
+          snap->rcutij[ninside] = (radi + radelem[jSpecies]) * rcutfac;
+          ++ninside;
+        }
+      }
+
+      // compute Ui, Yi for atom i
+      {
+        snap->compute_ui(ninside);
+
+        // Get the 1D view to the 2D beta array at row i
+        auto betai = beta.data_1D(contributing_index);
+
+        // Get the pointer to the beta array of data for atom i
+        double const *const bi = const_cast<double *>(betai.data());
+
+        snap->compute_yi(bi);
+      }
+
+      // Compute contribution to force, etc.
+
+      // For the neighbors of particle i within the cutoff:
+      // Compute deidrj = dEi/dRj = -dEi/dRi add to Fi, subtract from Fj
+
+      VectorOfSizeDIM deidrj;
+
+      // Setup loop over neighbors of particle i
+      for (int n = 0; n < ninside; ++n)
+      {
+        // Get the 1D view to the 2D snap->rij array at row n
+        auto rij = snap->rij.data_1D(n);
+
+        // Get the pointer to the rij_const array of data
+        double const *const rij_const = const_cast<double *>(rij.data());
+
+        snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], n);
+
+        snap->compute_deidrj(deidrj);
+
+        // Index of the neighbor atom
+        int const j = snap->inside[n];
+
+        // Contribution to forces
+        if (isComputeForces)
+        {
+          forces[i][0] += deidrj[0];
+          forces[i][1] += deidrj[1];
+          forces[i][2] += deidrj[2];
+
+          forces[j][0] -= deidrj[0];
+          forces[j][1] -= deidrj[1];
+          forces[j][2] -= deidrj[2];
+        }
+
+        if (isComputeProcess_dEdr)
+        {
+          double const rrsq = std::sqrt(rij_const[0] * rij_const[0] + rij_const[1] * rij_const[1] + rij_const[2] * rij_const[2]);
+          double const dedr = std::sqrt(deidrj[0] * deidrj[0] + deidrj[1] * deidrj[1] + deidrj[2] * deidrj[2]);
+          ier = modelComputeArguments->ProcessDEDrTerm(dedr, rrsq, rij_const, i, j);
+          if (ier)
+          {
+            LOG_ERROR("ProcessDEDrTerm");
+            return ier;
+          }
+        }
+
+        if (isComputeVirial || isComputeParticleVirial)
+        {
+          // Virial has 6 components and is stored as a 6-element
+          // vector in the following order: xx, yy, zz, yz, xz, xy.
+
+          VectorOfSizeSix v;
+
+          v[0] = rij_const[0] * deidrj[0];
+          v[1] = rij_const[1] * deidrj[1];
+          v[2] = rij_const[2] * deidrj[2];
+          v[3] = rij_const[1] * deidrj[2];
+          v[4] = rij_const[0] * deidrj[2];
+          v[5] = rij_const[0] * deidrj[1];
+
+          if (isComputeVirial)
+          {
+            virial[0] += v[0];
+            virial[1] += v[1];
+            virial[2] += v[2];
+            virial[3] += v[3];
+            virial[4] += v[4];
+            virial[5] += v[5];
+          }
+
+          if (isComputeParticleVirial)
+          {
+            v[0] *= 0.5;
+            v[1] *= 0.5;
+            v[2] *= 0.5;
+            v[3] *= 0.5;
+            v[4] *= 0.5;
+            v[5] *= 0.5;
+
+            particleVirial[i][0] += v[0];
+            particleVirial[i][1] += v[1];
+            particleVirial[i][2] += v[2];
+            particleVirial[i][3] += v[3];
+            particleVirial[i][4] += v[4];
+            particleVirial[i][5] += v[5];
+
+            particleVirial[j][0] += v[0];
+            particleVirial[j][1] += v[1];
+            particleVirial[j][2] += v[2];
+            particleVirial[j][3] += v[3];
+            particleVirial[j][4] += v[4];
+            particleVirial[j][5] += v[5];
           } // isComputeParticleVirial
         }   // isComputeVirial || isComputeParticleVirial
       }     // End of loop over neighbors of particle i
