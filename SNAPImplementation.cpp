@@ -623,6 +623,7 @@ void SNAPImplementation::GetNextDataLine(std::FILE *const filePtr,
                                          int const maxSize,
                                          int *endOfFileFlag)
 {
+  *endOfFileFlag = 0;
   do
   {
     if (!std::fgets(nextLinePtr, maxSize, filePtr))
@@ -651,7 +652,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
 {
   char nextLine[MAXLINE];
 
-  int endOfFileFlag(0);
+  int endOfFileFlag;
 
   // keep track of known species
   std::map<KIM::SpeciesName const, int, KIM::SPECIES_NAME::Comparator> speciesMap;
