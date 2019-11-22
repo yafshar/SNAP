@@ -31,6 +31,7 @@
 //    Ryan S. Elliott
 //
 
+
 #include "KIM_ModelDriverHeaders.hpp"
 #include "KIM_LogMacros.hpp"
 
@@ -1876,7 +1877,7 @@ int SNAPImplementation::RegisterKIMParameters(KIM::ModelDriverCreate *const mode
 
   if (nzbls)
   {
-    ier = modelDriverCreate->SetParameterPointer(1, &inner, "inner",
+    ier = modelDriverCreate->SetParameterPointer(1, &inner, "zbl_inner",
                                                  "Distance where switching function in the ZBL interaction begins.");
     if (ier)
     {
@@ -1884,7 +1885,7 @@ int SNAPImplementation::RegisterKIMParameters(KIM::ModelDriverCreate *const mode
       return ier;
     }
 
-    ier = modelDriverCreate->SetParameterPointer(1, &outer, "outer",
+    ier = modelDriverCreate->SetParameterPointer(1, &outer, "zbl_outer",
                                                  "Distance Global cutoff for the ZBL interaction.");
     if (ier)
     {
@@ -2192,6 +2193,9 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
       // number of neighbors of I within cutoff
       int ninside = 0;
 
+      // number of neighbors of I outside the cutoff
+      int noutside = numnei;
+
       // note Rij sign convention => dU/dRij = dU/dRj = -dU/dRi
 
       // Setup loop over neighbors of current particle
@@ -2222,11 +2226,11 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
         }
         else
         {
-          int const n_ = numnei - n - 1;
-          snap->rij(n_, 0) = dx;
-          snap->rij(n_, 1) = dy;
-          snap->rij(n_, 2) = dz;
-          snap->inside[n_] = j;
+          --noutside;
+          snap->rij(noutside, 0) = dx;
+          snap->rij(noutside, 1) = dy;
+          snap->rij(noutside, 2) = dz;
+          snap->inside[noutside] = j;
         }
       }
 
