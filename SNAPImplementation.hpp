@@ -31,6 +31,7 @@
 //    Ryan S. Elliott
 //
 
+
 #ifndef SNAP_IMPLEMENTATION_HPP
 #define SNAP_IMPLEMENTATION_HPP
 
