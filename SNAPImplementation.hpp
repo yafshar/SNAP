@@ -540,7 +540,10 @@ private:
   std::vector<std::string> hybridStyleSpeciesNames;
 
   /*! Species flag indicating how to compute the interaction */
-  Array2D<int> setflag;
+  Array2D<HYBRIDSTYLE> setflag;
+
+  /*! SNAP flag indicating if to compute the SNAP interaction based on indices */
+  std::vector<bool> snapflag;
 
   /*! Indicator if there is any ZBL style */
   int nzbls;
