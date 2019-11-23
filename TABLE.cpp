@@ -278,7 +278,7 @@ int TABLE::read_table(std::FILE *const filePointers, char const *keyword)
   // Rewind the file in case it is in the middle of the file
   if (std::fseek(filePointers, 0, SEEK_SET))
   {
-    HELPER_LOG_ERROR("Filed to rewind the Tabulated file. \n");
+    HELPER_LOG_ERROR("Failed to rewind the Tabulated file.\n");
     return true;
   }
 
@@ -292,7 +292,7 @@ int TABLE::read_table(std::FILE *const filePointers, char const *keyword)
     GetNextDataLine(filePointers, nextLine, MAXLINE, &endOfFileFlag);
     if (endOfFileFlag)
     {
-      HELPER_LOG_ERROR("Reached the end of the Tabulated file. \n"
+      HELPER_LOG_ERROR("Reached the end of the Tabulated file.\n"
                        "Unable to find the keyword = " +
                        std::string(keyword) +
                        "\n");
@@ -313,7 +313,7 @@ int TABLE::read_table(std::FILE *const filePointers, char const *keyword)
     GetNextDataLine(filePointers, nextLine, MAXLINE, &endOfFileFlag);
     if (endOfFileFlag)
     {
-      HELPER_LOG_ERROR("Reached the end of Tabulated file. \n");
+      HELPER_LOG_ERROR("Reached the end of Tabulated file.\n");
       return true;
     }
 
@@ -344,7 +344,7 @@ int TABLE::read_table(std::FILE *const filePointers, char const *keyword)
 
       if (1 << ntablebits != ninput)
       {
-        HELPER_LOG_ERROR("Bitmapped table is incorrect length in table file. \n");
+        HELPER_LOG_ERROR("Bitmapped table is incorrect length in table file.\n");
         return true;
       }
 
@@ -371,7 +371,7 @@ int TABLE::read_table(std::FILE *const filePointers, char const *keyword)
       GetNextDataLine(filePointers, nextLine, MAXLINE, &endOfFileFlag);
       if (endOfFileFlag)
       {
-        HELPER_LOG_ERROR("Reached the end of the Tabulated file. \n");
+        HELPER_LOG_ERROR("Reached the end of the Tabulated file.\n");
         return true;
       }
 
@@ -461,36 +461,33 @@ int TABLE::read_table(std::FILE *const filePointers, char const *keyword)
 
     if (ferror)
     {
-      HELPER_LOG_ERROR("WARNING:\n" +
-                       std::to_string(ferror) +
-                       " of " +
-                       std::to_string(ninput) +
-                       "force values in table are inconsistent with -dE/dr. \n " +
-                       "  Should only be flagged at inflection points. \n");
+      HELPER_LOG_WARNING(std::to_string(ferror) +
+                         " of " +
+                         std::to_string(ninput) +
+                         " force values in table are inconsistent with -dE/dr.\n" +
+                         " Should only be flagged at inflection points.\n");
     }
 
     // warn if re-computed distance values differ from file values
     if (rerror)
     {
-      HELPER_LOG_ERROR("WARNING:\n" +
-                       std::to_string(rerror) +
-                       " of " +
-                       std::to_string(ninput) +
-                       "distance values in table with relative error. \n " +
-                       "  over " +
-                       std::to_string(EPSILONR) +
-                       " to re-computed values. \n");
+      HELPER_LOG_WARNING(std::to_string(rerror) +
+                         " of " +
+                         std::to_string(ninput) +
+                         " distance values in table with relative error.\n" +
+                         " over " +
+                         std::to_string(EPSILONR) +
+                         " to re-computed values.\n");
     }
 
     // warn if data was read incompletely, e.g. columns were missing
     if (cerror)
     {
-      HELPER_LOG_ERROR("WARNING:\n" +
-                       std::to_string(cerror) +
-                       " of " +
-                       std::to_string(ninput) +
-                       "lines in table were incomplete. \n " +
-                       "  or could not be parsed completely. \n");
+      HELPER_LOG_WARNING(std::to_string(cerror) +
+                         " of " +
+                         std::to_string(ninput) +
+                         " lines in table were incomplete.\n" +
+                         " or could not be parsed completely.\n");
     }
   }
 
@@ -554,7 +551,7 @@ int TABLE::param_extract(char *line)
     {
       HELPER_LOG_ERROR("Invalid keyword (" +
                        std::string(word) +
-                       ") in the tabulated file! \n");
+                       ") in the tabulated file!\n");
       return true;
     }
 
@@ -566,7 +563,7 @@ int TABLE::param_extract(char *line)
     return false;
   }
 
-  HELPER_LOG_ERROR("There is no N indicating the number of entries in the tabulated file! \n");
+  HELPER_LOG_ERROR("There is no N indicating the number of entries in the tabulated file!\n");
   return true;
 }
 
@@ -983,19 +980,19 @@ int init_bitmap(double const inner,
 {
   if (sizeof(int) != sizeof(float))
   {
-    HELPER_LOG_ERROR("Bitmapped lookup tables require int/float be same size. \n");
+    HELPER_LOG_ERROR("Bitmapped lookup tables require int/float be same size.\n");
     return true;
   }
 
   if (ntablebits > static_cast<int>(sizeof(float)) * CHAR_BIT)
   {
-    HELPER_LOG_ERROR("Too many total bits for bitmapped lookup table. \n");
+    HELPER_LOG_ERROR("Too many total bits for bitmapped lookup table.\n");
     return true;
   }
 
   if (inner >= outer)
   {
-    HELPER_LOG_ERROR("TABLE inner cutoff >= outer cutoff. \n");
+    HELPER_LOG_ERROR("TABLE inner cutoff >= outer cutoff.\n");
     return true;
   }
 
@@ -1027,17 +1024,17 @@ int init_bitmap(double const inner,
 
   if (nexpbits > static_cast<int>(sizeof(float)) * CHAR_BIT - FLT_MANT_DIG)
   {
-    HELPER_LOG_ERROR("Too many exponent bits for lookup table. \n");
+    HELPER_LOG_ERROR("Too many exponent bits for lookup table.\n");
     return true;
   }
   if (nmantbits + 1 > FLT_MANT_DIG)
   {
-    HELPER_LOG_ERROR("Too many mantissa bits for lookup table. \n");
+    HELPER_LOG_ERROR("Too many mantissa bits for lookup table.\n");
     return true;
   }
   if (nmantbits < 3)
   {
-    HELPER_LOG_ERROR("Too few bits for lookup table. \n");
+    HELPER_LOG_ERROR("Too few bits for lookup table.\n");
     return true;
   }
 
