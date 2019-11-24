@@ -119,6 +119,9 @@ The format of the HYBRID parameter file is as follows:
 * The 'keyword' specifies a section of the file.
 * The 'cutoff' is an optional coefficient in distance unit.
 *
+* NOTE:
+* keyword should be unique for each pair interaction
+*
 *
 * Example 1, we use 2 styles
 * table  linear  1000
