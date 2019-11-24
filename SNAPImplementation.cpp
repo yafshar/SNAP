@@ -31,7 +31,6 @@
 //    Ryan S. Elliott
 //
 
-
 #include "KIM_ModelDriverHeaders.hpp"
 #include "KIM_LogMacros.hpp"
 
@@ -404,7 +403,7 @@ int SNAPImplementation::WriteParameterizedModel(KIM::ModelWriteParameterizedMode
         {
           for (int jSpecies = iSpecies; jSpecies < nAllSpecies; ++jSpecies)
           {
-            if (setflag(iSpecies, jSpecies) == static_cast<int>(HYBRIDSTYLE::ZBL))
+            if (setflag(iSpecies, jSpecies) == HYBRIDSTYLE::ZBL)
             {
               fs << allSpeciesNames[iSpecies] << "  " << allSpeciesNames[jSpecies] << "  zbl  " << atomicNumber[iSpecies] << "  " << atomicNumber[jSpecies] << std::endl;
             }
@@ -483,7 +482,7 @@ int SNAPImplementation::WriteParameterizedModel(KIM::ModelWriteParameterizedMode
         {
           for (int jSpecies = iSpecies; jSpecies < nAllSpecies; ++jSpecies)
           {
-            if (setflag(iSpecies, jSpecies) == static_cast<int>(HYBRIDSTYLE::TABLE))
+            if (setflag(iSpecies, jSpecies) == HYBRIDSTYLE::TABLE)
             {
               fs << allSpeciesNames[iSpecies] << "  " << allSpeciesNames[jSpecies] << "  table  " << tableNumber(iSpecies, jSpecies) << "  filename  keyword  [cutoff]" << std::endl;
             }
@@ -1015,7 +1014,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
     }
 
     // Allocate memory
-    setflag.resize(nAllSpecies, nAllSpecies, static_cast<int>(HYBRIDSTYLE::NONE));
+    setflag.resize(nAllSpecies, nAllSpecies, HYBRIDSTYLE::NONE);
 
     if (nzbls)
     {
@@ -1034,7 +1033,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
     // Rewind the file
     if (std::fseek(parameterFilePointers[2], 0, SEEK_SET))
     {
-      HELPER_LOG_ERROR("Filed to rewind the Hybrid parameter file.\n");
+      HELPER_LOG_ERROR("Failed to rewind the Hybrid parameter file.\n");
       return true;
     }
 
@@ -1175,12 +1174,12 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
           }
           else
           {
-            setflag(jSpecies, iSpecies) = static_cast<int>(HYBRIDSTYLE::ZBL);
+            setflag(jSpecies, iSpecies) = HYBRIDSTYLE::ZBL;
 
             atomicNumber[jSpecies] = z_jSpecies;
           }
 
-          setflag(iSpecies, jSpecies) = static_cast<int>(HYBRIDSTYLE::ZBL);
+          setflag(iSpecies, jSpecies) = HYBRIDSTYLE::ZBL;
 
           atomicNumber[iSpecies] = z_iSpecies;
 
@@ -1199,6 +1198,13 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
             return true;
           }
 
+          // Table keyword
+          if (!keyval5)
+          {
+            HELPER_LOG_ERROR("Incorrect table style in the Hybrid parameter file (No keyword).\n");
+            return true;
+          }
+
           int const sn = tableStyleNumber - 1;
           int const nt = nTables++;
 
@@ -1210,29 +1216,57 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
           int tableFileNumber = 3;
           for (; tableFileNumber < numberParameterFiles; ++tableFileNumber)
           {
-            int ier = modelDriverCreate->GetParameterFileName(tableFileNumber, &tableFileName);
-            if (ier)
+            // if (modelDriverCreate->GetParameterFileName(tableFileNumber, &tableFileName))
+            // {
+            //   LOG_ERROR("Unable to get the table file name.\n");
+            //   return true;
+            // }
+
+            // Dirty hack to make it work
+            bool findMatch(false);
+
             {
-              LOG_ERROR("Unable to get the table file name.\n");
-              return ier;
+              // Rewind the file in case it is in the middle of the file
+              if (std::fseek(parameterFilePointers[tableFileNumber], 0, SEEK_SET))
+              {
+                HELPER_LOG_ERROR("Failed to rewind the file. \n");
+                return true;
+              }
+
+              char tmpNextLine[MAXLINE];
+
+              // Loop until section found with matching keyword
+              while (1)
+              {
+                GetNextDataLine(parameterFilePointers[tableFileNumber], tmpNextLine, MAXLINE, &endOfFileFlag);
+                if (endOfFileFlag)
+                {
+                  break;
+                }
+                char *word = std::strtok(tmpNextLine, " \t\n\r");
+                if (!std::strcmp(word, keyval5))
+                {
+                  findMatch = true;
+                  // matching keyword
+                  break;
+                }
+              } // End of loop to find the matching keyword
             }
 
-            if (!std::strcmp(keyval4, tableFileName->c_str()))
+            if (findMatch)
             {
               break;
             }
+
+            // if (!std::strcmp(keyval4, tableFileName->c_str()))
+            // {
+            //   break;
+            // }
           }
 
           if (tableFileNumber >= numberParameterFiles)
           {
             HELPER_LOG_ERROR("Incorrect TABLE filename.\n");
-            return true;
-          }
-
-          // Table keyword
-          if (!keyval5)
-          {
-            HELPER_LOG_ERROR("Incorrect table style in the Hybrid parameter file (No keyword).\n");
             return true;
           }
 
@@ -1330,12 +1364,12 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
 
           if (iSpecies != jSpecies)
           {
-            setflag(jSpecies, iSpecies) = static_cast<int>(HYBRIDSTYLE::TABLE);
+            setflag(jSpecies, iSpecies) = HYBRIDSTYLE::TABLE;
 
             tableNumber(jSpecies, iSpecies) = nt;
           }
 
-          setflag(iSpecies, jSpecies) = static_cast<int>(HYBRIDSTYLE::TABLE);
+          setflag(iSpecies, jSpecies) = HYBRIDSTYLE::TABLE;
 
           tableNumber(iSpecies, jSpecies) = nt;
 
@@ -1344,6 +1378,13 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
       }   // if zbl or table
     }     // End of while loop
   }       // if numberParameterFiles > 2
+
+  snapflag.resize(nAllSpecies ? nAllSpecies : nelements, false);
+  for (auto elem : elements)
+  {
+    int const iSpecies = speciesMap[elem];
+    snapflag[iSpecies] = true;
+  }
 
   // everything is good
   return false;
@@ -1610,7 +1651,7 @@ int SNAPImplementation::setRefreshMutableValues(ModelObj *const modelObj)
     {
       for (int jSpecies = iSpecies; jSpecies < nAllSpecies; ++jSpecies)
       {
-        if (setflag(iSpecies, jSpecies) == static_cast<int>(HYBRIDSTYLE::ZBL))
+        if (setflag(iSpecies, jSpecies) == HYBRIDSTYLE::ZBL)
         {
           zbl->set_coeff(iSpecies, jSpecies, atomicNumber[iSpecies], atomicNumber[jSpecies], angstrom, qqr2e, qelectron);
         }
@@ -1936,60 +1977,76 @@ void SNAPImplementation::computeBispectrum(KIM::ModelComputeArguments const *con
   for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
   {
     if (!particleContributing[i])
+    {
       continue;
-
-    // Get neighbors of i
-    modelComputeArguments->GetNeighborList(0, i, &numnei, &n1atom);
+    }
 
     // Get the species index for atom i
     int const iSpecies = particleSpeciesCodes[i];
-    double const radi = radelem[iSpecies];
 
-    double const x = coordinates[i][0];
-    double const y = coordinates[i][1];
-    double const z = coordinates[i][2];
-
-    // Make sure {rij, inside, wj, and rcutij} arrays are big enough for numnei atoms
-    snap->grow_rij(numnei);
-
-    // number of neighbors of I within cutoff
-    int ninside = 0;
-
-    // note Rij sign convention => dU/dRij = dU/dRj = -dU/dRi
-
-    // Setup loop over neighbors of current particle
-    for (int n = 0; n < numnei; ++n)
+    if (!snapflag[iSpecies])
     {
-      int const j = n1atom[n];
-      int const jSpecies = particleSpeciesCodes[j];
-
-      double const dx = coordinates[j][0] - x;
-      double const dy = coordinates[j][1] - y;
-      double const dz = coordinates[j][2] - z;
-
-      double const rsq = dx * dx + dy * dy + dz * dz;
-
-      if (rsq < cutsq(iSpecies, jSpecies) && rsq > 1e-20)
-      {
-        snap->rij(ninside, 0) = dx;
-        snap->rij(ninside, 1) = dy;
-        snap->rij(ninside, 2) = dz;
-        snap->inside[ninside] = j;
-        snap->wj[ninside] = wjelem[jSpecies];
-        snap->rcutij[ninside] = (radi + radelem[jSpecies]) * rcutfac;
-        ++ninside;
-      }
+      continue;
     }
 
-    snap->compute_ui(ninside);
+    {
+      // Get neighbors of i
+      modelComputeArguments->GetNeighborList(0, i, &numnei, &n1atom);
 
-    snap->compute_zi();
+      double const radi = radelem[iSpecies];
 
-    snap->compute_bi();
+      double const x = coordinates[i][0];
+      double const y = coordinates[i][1];
+      double const z = coordinates[i][2];
 
-    auto Bi = bispectrum.data_1D(contributing_index++);
-    for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
-      Bi[icoeff] = snap->blist[icoeff];
+      // Make sure {rij, inside, wj, and rcutij} arrays are big enough for numnei atoms
+      snap->grow_rij(numnei);
+
+      // number of neighbors of I within cutoff
+      int ninside = 0;
+
+      // note Rij sign convention => dU/dRij = dU/dRj = -dU/dRi
+
+      // Setup loop over neighbors of current particle
+      for (int n = 0; n < numnei; ++n)
+      {
+        int const j = n1atom[n];
+
+        int const jSpecies = particleSpeciesCodes[j];
+
+        if (snapflag[jSpecies])
+        {
+          double const dx = coordinates[j][0] - x;
+          double const dy = coordinates[j][1] - y;
+          double const dz = coordinates[j][2] - z;
+
+          double const rsq = dx * dx + dy * dy + dz * dz;
+
+          if (rsq < cutsq(iSpecies, jSpecies) && rsq > 1e-20)
+          {
+            snap->rij(ninside, 0) = dx;
+            snap->rij(ninside, 1) = dy;
+            snap->rij(ninside, 2) = dz;
+            snap->inside[ninside] = j;
+            snap->wj[ninside] = wjelem[jSpecies];
+            snap->rcutij[ninside] = (radi + radelem[jSpecies]) * rcutfac;
+            ++ninside;
+          }
+        }
+      }
+
+      snap->compute_ui(ninside);
+
+      snap->compute_zi();
+
+      snap->compute_bi();
+
+      auto Bi = bispectrum.data_1D(contributing_index++);
+      for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
+      {
+        Bi[icoeff] = snap->blist[icoeff];
+      }
+    }
   }
 }
 
@@ -2001,41 +2058,52 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes, int const 
     for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
     {
       if (!particleContributing[i])
+      {
         continue;
+      }
 
       // Get the species index for atom i
       int const iSpecies = particleSpeciesCodes[i];
 
-      // Get the 1D view to the 2D coeffelem array at row iSpecies
-      auto coeffi = coeffelem.data_1D(iSpecies);
-
-      // Get the pointer to the raw data + 1 to avoid extra sum
-      double *Ci = coeffi.data() + 1;
-
-      // Get the 1D view to the 2D beta array at row i
-      auto bi = beta.data_1D(contributing_index);
-
-      for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
-        bi[icoeff] = Ci[icoeff];
-
-      // Get the pointer to the start of coeffi array of data
-      --Ci;
-
-      // Get the 1D view to the 2D bispectrum array at row i
-      auto Bi = bispectrum.data_1D(contributing_index++);
-
-      int k = ncoeff + 1;
-
-      for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
+      if (!snapflag[iSpecies])
       {
-        double const bveci = Bi[icoeff];
+        continue;
+      }
 
-        bi[icoeff] += Ci[k++] * bveci;
+      {
+        // Get the 1D view to the 2D coeffelem array at row iSpecies
+        auto coeffi = coeffelem.data_1D(iSpecies);
 
-        for (int jcoeff = icoeff + 1; jcoeff < ncoeff; ++jcoeff, ++k)
+        // Get the pointer to the raw data + 1 to avoid extra sum
+        double *Ci = coeffi.data() + 1;
+
+        // Get the 1D view to the 2D beta array at row i
+        auto bi = beta.data_1D(contributing_index);
+
+        for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
         {
-          bi[icoeff] += Ci[k] * Bi[jcoeff];
-          bi[jcoeff] += Ci[k] * bveci;
+          bi[icoeff] = Ci[icoeff];
+        }
+
+        // Get the pointer to the start of coeffi array of data
+        --Ci;
+
+        // Get the 1D view to the 2D bispectrum array at row i
+        auto Bi = bispectrum.data_1D(contributing_index++);
+
+        int k = ncoeff + 1;
+
+        for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
+        {
+          double const bveci = Bi[icoeff];
+
+          bi[icoeff] += Ci[k++] * bveci;
+
+          for (int jcoeff = icoeff + 1; jcoeff < ncoeff; ++jcoeff, ++k)
+          {
+            bi[icoeff] += Ci[k] * Bi[jcoeff];
+            bi[jcoeff] += Ci[k] * bveci;
+          }
         }
       }
     }
@@ -2045,22 +2113,29 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes, int const 
     for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
     {
       if (!particleContributing[i])
+      {
         continue;
+      }
 
       // Get the species index for atom i
       int const iSpecies = particleSpeciesCodes[i];
 
-      // Get the 1D view to the 2D coeffelem array at row iSpecies
-      auto coeffi = coeffelem.data_1D(iSpecies);
+      if (snapflag[iSpecies])
+      {
+        // Get the 1D view to the 2D coeffelem array at row iSpecies
+        auto coeffi = coeffelem.data_1D(iSpecies);
 
-      // Get the pointer to the raw data + 1 to avoid extra sum
-      double *Ci = coeffi.data() + 1;
+        // Get the pointer to the raw data + 1 to avoid extra sum
+        double *Ci = coeffi.data() + 1;
 
-      // Get the 1D view to the 2D beta array at row i
-      auto bi = beta.data_1D(contributing_index++);
+        // Get the 1D view to the 2D beta array at row i
+        auto bi = beta.data_1D(contributing_index++);
 
-      for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
-        bi[icoeff] = Ci[icoeff];
+        for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
+        {
+          bi[icoeff] = Ci[icoeff];
+        }
+      }
     }
   }
 }
@@ -2170,13 +2245,12 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
     for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
     {
       if (!particleContributing[i])
+      {
         continue;
+      }
 
       // Get the species index for atom i
       int const iSpecies = particleSpeciesCodes[i];
-
-      // Get the iSpecies cutoff
-      double const radi = radelem[iSpecies];
 
       double const xi = coordinates[i][0];
       double const yi = coordinates[i][1];
@@ -2193,49 +2267,63 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
       // number of neighbors of I within cutoff
       int ninside = 0;
 
-      // number of neighbors of I outside the cutoff
-      int noutside = numnei;
-
-      // note Rij sign convention => dU/dRij = dU/dRj = -dU/dRi
-
-      // Setup loop over neighbors of current particle
-      for (int n = 0; n < numnei; ++n)
+      if (snapflag[iSpecies])
       {
-        // Index of the neighbor atom
-        int const j = n1atom[n];
+        // Get the iSpecies cutoff
+        double const radi = radelem[iSpecies];
 
-        // Get the species index for atom j
-        int const jSpecies = particleSpeciesCodes[j];
+        // noutside, is the number of neighbors of I outside the cutoff
 
-        double const dx = coordinates[j][0] - xi;
-        double const dy = coordinates[j][1] - yi;
-        double const dz = coordinates[j][2] - zi;
+        // note Rij sign convention => dU/dRij = dU/dRj = -dU/dRi
 
-        double const rsq = dx * dx + dy * dy + dz * dz;
-
-        if (rsq < cutsq(iSpecies, jSpecies) && rsq > 1e-20)
+        // Setup loop over neighbors of current particle
+        for (int n = 0, noutside = numnei; n < numnei; ++n)
         {
-          snap->rij(ninside, 0) = dx;
-          snap->rij(ninside, 1) = dy;
-          snap->rij(ninside, 2) = dz;
-          snap->inside[ninside] = j;
-          snap->wj[ninside] = wjelem[jSpecies];
-          // Get the pair of iSpecies & jSpecies cutoff
-          snap->rcutij[ninside] = (radi + radelem[jSpecies]) * rcutfac;
-          ++ninside;
-        }
-        else
-        {
-          --noutside;
-          snap->rij(noutside, 0) = dx;
-          snap->rij(noutside, 1) = dy;
-          snap->rij(noutside, 2) = dz;
-          snap->inside[noutside] = j;
-        }
-      }
+          // Index of the neighbor atom
+          int const j = n1atom[n];
 
-      // compute Ui, Yi for atom i
-      {
+          // Get the species index for atom j
+          int const jSpecies = particleSpeciesCodes[j];
+
+          double const dx = coordinates[j][0] - xi;
+          double const dy = coordinates[j][1] - yi;
+          double const dz = coordinates[j][2] - zi;
+
+          if (snapflag[jSpecies])
+          {
+            double const rsq = dx * dx + dy * dy + dz * dz;
+
+            if (rsq < cutsq(iSpecies, jSpecies) && rsq > 1e-20)
+            {
+              snap->rij(ninside, 0) = dx;
+              snap->rij(ninside, 1) = dy;
+              snap->rij(ninside, 2) = dz;
+              snap->inside[ninside] = j;
+              snap->wj[ninside] = wjelem[jSpecies];
+              // Get the pair of iSpecies & jSpecies cutoff
+              snap->rcutij[ninside] = (radi + radelem[jSpecies]) * rcutfac;
+              ++ninside;
+            }
+            else
+            {
+              --noutside;
+              snap->rij(noutside, 0) = dx;
+              snap->rij(noutside, 1) = dy;
+              snap->rij(noutside, 2) = dz;
+              snap->inside[noutside] = j;
+            }
+          }
+          else
+          {
+            --noutside;
+            snap->rij(noutside, 0) = dx;
+            snap->rij(noutside, 1) = dy;
+            snap->rij(noutside, 2) = dz;
+            snap->inside[noutside] = j;
+          }
+        }
+
+        // compute Ui, Yi for atom i
         snap->compute_ui(ninside);
 
         // Get the 1D view to the 2D beta array at row i
@@ -2245,6 +2333,24 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
         double const *const bi = const_cast<double *>(betai.data());
 
         snap->compute_yi(bi);
+      }
+      else
+      {
+        // Setup loop over neighbors of current particle
+        for (int n = 0; n < numnei; ++n)
+        {
+          // Index of the neighbor atom
+          int const j = n1atom[n];
+
+          double const dx = coordinates[j][0] - xi;
+          double const dy = coordinates[j][1] - yi;
+          double const dz = coordinates[j][2] - zi;
+
+          snap->rij(n, 0) = dx;
+          snap->rij(n, 1) = dy;
+          snap->rij(n, 2) = dz;
+          snap->inside[n] = j;
+        }
       }
 
       // Compute contribution to force, etc.
@@ -2267,6 +2373,7 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
         int const jContrib = particleContributing[j];
 
         bool const lsnap = n < ninside;
+
         bool const lhalf = !(jContrib && (j < i));
 
         if (!lsnap)
@@ -2275,14 +2382,15 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
           {
             continue;
           }
-          if (setflag(iSpecies, jSpecies) == static_cast<int>(HYBRIDSTYLE::NONE))
+          if (setflag(iSpecies, jSpecies) == HYBRIDSTYLE::NONE)
           {
             continue;
           }
         }
 
-        bool lzbl = lhalf ? (setflag(iSpecies, jSpecies) == static_cast<int>(HYBRIDSTYLE::ZBL)) : false;
-        bool ltable = lhalf ? (setflag(iSpecies, jSpecies) == static_cast<int>(HYBRIDSTYLE::TABLE)) : false;
+        bool lzbl = lhalf ? (setflag(iSpecies, jSpecies) == HYBRIDSTYLE::ZBL) : false;
+
+        bool ltable = lhalf ? (setflag(iSpecies, jSpecies) == HYBRIDSTYLE::TABLE) : false;
         if (ltable)
         {
           tb = &tables[tableNumber(iSpecies, jSpecies)];
@@ -2465,14 +2573,7 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
 
             if (isComputeEnergy)
             {
-              if (jContrib)
-              {
-                *energy += phi;
-              }
-              else
-              {
-                *energy += 0.5 * phi;
-              }
+              *energy += jContrib ? phi : 0.5 * phi;
             }
 
             if (isComputeParticleEnergy)
@@ -2631,70 +2732,74 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
         }   // isComputeVirial || isComputeParticleVirial
       }     // End of loop over neighbors of particle i
 
-      // Energy contribution
-      if (isComputeEnergy || isComputeParticleEnergy)
+      if (snapflag[iSpecies])
       {
-        // Compute contribution to energy.
-
-        // Energy of particle i, sum over coeffs_k * Bi_k
-
-        // Get the 1D view to the 2D coeffelem array at row iSpecies
-        auto coeffi = coeffelem.data_1D(iSpecies);
-
-        // Compute phi
-        double phi = coeffi[0];
-
-        // Get the pointer to the raw data + 1 to avoid extra summation
-        double *Ci = coeffi.data() + 1;
-
-        // Get the bispectrum of particle i
-        // Get the 1D view to the 2D bispectrum array at row i
-        auto Bi = bispectrum.data_1D(contributing_index);
-
-        // E = beta.B + 0.5*B^t.alpha.B
-
-        // Linear contributions
-        for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
-          phi += Ci[icoeff] * Bi[icoeff];
-
-        // Quadratic contributions
-        if (quadraticflag)
+        // Energy contribution
+        if (isComputeEnergy || isComputeParticleEnergy)
         {
-          // Get the pointer to the start of coeffi array of data
-          --Ci;
+          // Compute contribution to energy.
 
-          int k = ncoeff + 1;
+          // Energy of particle i, sum over coeffs_k * Bi_k
 
+          // Get the 1D view to the 2D coeffelem array at row iSpecies
+          auto coeffi = coeffelem.data_1D(iSpecies);
+
+          // Compute phi
+          double phi = coeffi[0];
+
+          // Get the pointer to the raw data + 1 to avoid extra summation
+          double *Ci = coeffi.data() + 1;
+
+          // Get the bispectrum of particle i
+          // Get the 1D view to the 2D bispectrum array at row i
+          auto Bi = bispectrum.data_1D(contributing_index);
+
+          // E = beta.B + 0.5*B^t.alpha.B
+
+          // Linear contributions
           for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
           {
-            double const bveci = Bi[icoeff];
-
-            phi += 0.5 * Ci[k++] * bveci * bveci;
-
-            for (int jcoeff = icoeff + 1; jcoeff < ncoeff; ++jcoeff)
-            {
-              double const bvecj = Bi[jcoeff];
-
-              phi += Ci[k++] * bveci * bvecj;
-            }
+            phi += Ci[icoeff] * Bi[icoeff];
           }
-        } // quadraticflag
 
-        // Contribution to energy
-        if (isComputeEnergy)
-        {
-          *energy += phi;
-        }
+          // Quadratic contributions
+          if (quadraticflag)
+          {
+            // Get the pointer to the start of coeffi array of data
+            --Ci;
 
-        // Contribution to particleEnergy
-        if (isComputeParticleEnergy)
-        {
-          particleEnergy[i] += phi;
-        }
-      } // isComputeEnergy || isComputeParticleEnergy
+            int k = ncoeff + 1;
 
-      ++contributing_index;
+            for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
+            {
+              double const bveci = Bi[icoeff];
 
+              phi += 0.5 * Ci[k++] * bveci * bveci;
+
+              for (int jcoeff = icoeff + 1; jcoeff < ncoeff; ++jcoeff)
+              {
+                double const bvecj = Bi[jcoeff];
+
+                phi += Ci[k++] * bveci * bvecj;
+              }
+            }
+          } // quadraticflag
+
+          // Contribution to energy
+          if (isComputeEnergy)
+          {
+            *energy += phi;
+          }
+
+          // Contribution to particleEnergy
+          if (isComputeParticleEnergy)
+          {
+            particleEnergy[i] += phi;
+          }
+        } // isComputeEnergy || isComputeParticleEnergy
+
+        ++contributing_index;
+      }
     } // End of loop over contributing particles
   }   // If it is a hybrid style
   else
@@ -2707,7 +2812,9 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
     for (int i = 0, contributing_index = 0; i < cachedNumberOfParticles_; ++i)
     {
       if (!particleContributing[i])
+      {
         continue;
+      }
 
       // Get the species index for atom i
       int const iSpecies = particleSpeciesCodes[i];
@@ -2812,6 +2919,7 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
         {
           double const rrsq = std::sqrt(rij_const[0] * rij_const[0] + rij_const[1] * rij_const[1] + rij_const[2] * rij_const[2]);
           double const dedr = std::sqrt(deidrj[0] * deidrj[0] + deidrj[1] * deidrj[1] + deidrj[2] * deidrj[2]);
+
           ier = modelComputeArguments->ProcessDEDrTerm(dedr, rrsq, rij_const, i, j);
           if (ier)
           {
@@ -2894,7 +3002,9 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
 
         // Linear contributions
         for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
+        {
           phi += Ci[icoeff] * Bi[icoeff];
+        }
 
         // Quadratic contributions
         if (quadraticflag)
