@@ -31,6 +31,7 @@
 //    Ryan S. Elliott
 //
 
+
 #include "KIM_ModelDriverHeaders.hpp"
 #include "KIM_LogMacros.hpp"
 
@@ -491,7 +492,7 @@ int SNAPImplementation::WriteParameterizedModel(KIM::ModelWriteParameterizedMode
       }
       fs << "\n\n"
          << "#\n"
-         << "# HYBRID style parameter file"
+         << "# SNAP HYBRID style parameter file"
          << "#\n";
       fs.close();
     }
@@ -1131,7 +1132,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
         KIM::SpeciesName const specName1(keywd);
         KIM::SpeciesName const specName2(keyval1);
 
-        // check for the species
+        // Extra check for the species
         auto iter = speciesMap.find(specName1);
         if (iter == speciesMap.end())
         {
@@ -1142,6 +1143,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
         }
         int const iSpecies = speciesMap[specName1];
 
+        // Extra check for the species
         iter = speciesMap.find(specName2);
         if (iter == speciesMap.end())
         {
@@ -1160,6 +1162,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
             return true;
           }
 
+          // Get the species atomic numbers
           double const z_iSpecies = std::atof(keyval3);
           double const z_jSpecies = std::atof(keyval4);
 
@@ -1167,7 +1170,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
           {
             if (z_iSpecies != z_jSpecies)
             {
-              HELPER_LOG_ERROR("Incorrect ZBL args.\n"
+              HELPER_LOG_ERROR("Incorrect ZBL args in the Hybrid parameter file.\n"
                                "When i == j, it is required that Z_i == Z_j.\n");
               return true;
             }
@@ -1194,7 +1197,8 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
           int const tableStyleNumber = std::stoi(keyval3);
           if (tableStyleNumber > nTableStyles)
           {
-            HELPER_LOG_ERROR("Incorrect style number > number of defined table styles.\n");
+            HELPER_LOG_ERROR("Incorrect style number in the Hybrid parameter file.\n"
+                             " style number > number of defined table styles.\n");
             return true;
           }
 
@@ -1208,6 +1212,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
           int const sn = tableStyleNumber - 1;
           int const nt = nTables++;
 
+          // Construct a table object
           TABLE tt(tables_info[sn].tableStyle, tables_info[sn].tableLength);
           tables[nt] = std::move(tt);
 
@@ -1222,14 +1227,20 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
             //   return true;
             // }
 
-            // Dirty hack to make it work
+            // A hack to make it work
+            //
+            // KIM-API, resgisters the table file name using a unique random
+            // string which is different from the tabulated file name in the
+            // hybrid parameter file, thus we use the unqiue heywords for
+            // each interaction pair to find the associated file
+
             bool findMatch(false);
 
             {
               // Rewind the file in case it is in the middle of the file
               if (std::fseek(parameterFilePointers[tableFileNumber], 0, SEEK_SET))
               {
-                HELPER_LOG_ERROR("Failed to rewind the file. \n");
+                HELPER_LOG_ERROR("Failed to rewind the file.\n");
                 return true;
               }
 
@@ -1243,11 +1254,13 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
                 {
                   break;
                 }
+
                 char *word = std::strtok(tmpNextLine, " \t\n\r");
+
+                // matching keyword
                 if (!std::strcmp(word, keyval5))
                 {
                   findMatch = true;
-                  // matching keyword
                   break;
                 }
               } // End of loop to find the matching keyword
@@ -1262,11 +1275,17 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
             // {
             //   break;
             // }
-          }
+
+          } // End of loop throug the number of registered parameter files
 
           if (tableFileNumber >= numberParameterFiles)
           {
-            HELPER_LOG_ERROR("Incorrect TABLE filename.\n");
+            HELPER_LOG_ERROR("Incorrect TABLE filename '" +
+                             std::string(keyval4) +
+                             "' in the Hybrid parameter file.\n"
+                             "and/or failed to find the unique keyword '" +
+                             std::string(keyval5) +
+                             "' in the tabulated filename.\n");
             return true;
           }
 
@@ -1283,7 +1302,11 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
           // for BITMAP tables, file values can be in non-ascending order
           if (tables[nt].ninput <= 1)
           {
-            HELPER_LOG_ERROR("Invalid table length.\n");
+            HELPER_LOG_ERROR("Invalid table length '" +
+                             std::to_string(tables[nt].ninput) +
+                             "' <= 1 read from the table file '" +
+                             std::string(keyval4) +
+                             "'.\n");
             return true;
           }
 
@@ -1294,7 +1317,9 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
 
             if (tables[nt].cut < 0.0)
             {
-              HELPER_LOG_ERROR("Invalid table cutoff.\n");
+              HELPER_LOG_ERROR("Invalid table cutoff '" +
+                               std::to_string(tables[nt].cut) +
+                               "' < 0.0 in the Hybrid parameter file.\n");
               return true;
             }
           }
@@ -1329,7 +1354,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
 
           if (rlo <= 0.0)
           {
-            HELPER_LOG_ERROR("Invalid table cutoff.\n");
+            HELPER_LOG_ERROR("Invalid table rlo <= 0.0.\n");
             return true;
           }
 
@@ -1358,7 +1383,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
           if (tables[nt].rflag == TABLEDISTANCESTYLE::BITMAP &&
               tables[nt].match == 0)
           {
-            HELPER_LOG_ERROR("Bitmapped table in the file does not match requested table.\n");
+            HELPER_LOG_ERROR("Bitmapped table in the file does not match the requested table.\n");
             return true;
           }
 
@@ -1379,6 +1404,8 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
     }     // End of while loop
   }       // if numberParameterFiles > 2
 
+  // Extra check to set the flag for all species defined to have interactions
+  // in the SNAP potential
   snapflag.resize(nAllSpecies ? nAllSpecies : nelements, false);
   for (auto elem : elements)
   {
@@ -1607,13 +1634,12 @@ int SNAPImplementation::setRefreshMutableValues(ModelObj *const modelObj)
   // Extra check
   if (ncoeff != snap->ncoeff)
   {
-    HELPER_LOG_ERROR("Wrong number of coefficients\nNumber of coefficients to the "
-                     "model and the one created in SNAP object do not match\n"
+    HELPER_LOG_ERROR("Wrong number of coefficients.\n"
                      "ncoeff = " +
                      std::to_string(ncoeff) +
                      " & SNAP ncoeff = " +
                      std::to_string(snap->ncoeff) +
-                     "\n");
+                     "\nNumber of coefficients to the model and the one created in SNAP object do not match\n");
     return true;
   }
 
@@ -2455,8 +2481,6 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
 
         if (ltable)
         {
-          dEidrByR_TABLE = 0.0;
-
           int const tlm1 = tb->tableLength - 1;
 
           if (tb->tableStyle == TABLESTYLE::LOOKUP)
@@ -2588,7 +2612,7 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
 
           if (ltable)
           {
-            double phi(0.0);
+            double phi;
 
             if (tb->tableStyle == TABLESTYLE::LOOKUP)
             {
@@ -2799,9 +2823,9 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
         } // isComputeEnergy || isComputeParticleEnergy
 
         ++contributing_index;
-      }
-    } // End of loop over contributing particles
-  }   // If it is a hybrid style
+      } // snapflag[iSpecies]
+    }   // End of loop over contributing particles
+  }     // If it is a hybrid style
   else
   // If it is not a hybrid style
   {
