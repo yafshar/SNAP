@@ -50,7 +50,7 @@ Optional keywords are `rfac0`, `rmin0`, `switchflag`, `bzeroflag`, and `quadrati
 
 ## Hybrid style
 
-SNAP can be used in a hybrid style and in combination with a Ziegler-Biersack-Littmark (ZBL[2]) screened nuclear repulsion potential and any other two-body interaction in the table style[3] representation.
+SNAP can be used in a hybrid style and in combination with a Ziegler-Biersack-Littmark (ZBL[2,3]) screened nuclear repulsion potential and any other two-body interaction in the table style[3,4] representation.
 
 ### HYBRID parameter file format
 
@@ -153,7 +153,9 @@ J Comp Phys, 285, 316 (2015)](https://www.sciencedirect.com/science/article/pii/
 2. J.F. Ziegler, J. P. Biersack, and U. Littmark, “The Stopping and Range of
 Ions in Matter,” Volume 1, Pergamon, 1985.
 
-3. [https://lammps.sandia.gov/doc/pair_table.html](https://lammps.sandia.gov/doc/pair_table.html)
+3. [https://lammps.sandia.gov](https://lammps.sandia.gov)
+
+4. [https://lammps.sandia.gov/doc/pair_table.html](https://lammps.sandia.gov/doc/pair_table.html)
 
 ## Contributing
 
