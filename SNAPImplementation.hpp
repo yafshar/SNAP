@@ -39,6 +39,8 @@
 
 #include "helper.hpp"
 #include "SNA.hpp"
+#include "ZBL.hpp"
+#include "TABLE.hpp"
 
 #include <cstdio>
 
@@ -46,16 +48,40 @@
 #include <vector>
 #include <memory>
 
-#ifdef NUM_PARAMETER_FILES
-#undef NUM_PARAMETER_FILES
+#ifdef MAX_NUM_PARAMETER_FILES
+#undef MAX_NUM_PARAMETER_FILES
 #endif
 
 /*!
- * \brief SNAP has two input files, which are:
+ * \brief SNAP has two mandatory input files, and an optional
+ * Ziegler-Biersack-Littmark (ZBL) pair styles parameter file
+ * which accounts for high-energy collisions between atoms.
+ * Two mandatory input file are :
  *  1) a SNAP coefficient file, usually ends in the '.snapcoeff' extension.
  *  2) a SNAP parameter file, usually ends in the '.snapparam' extension.
+ * Optional input files include:
+ *  3) Hybrid parameter file, usually ends in the '.hybridparam' extension.
+ *     It includes a Ziegler-Biersack-Littmark (ZBL) pair styles parameter,
+ *     as well as pair interactions through table style
+ *  4, 5, ...)  interpolation table files from potential energy and force
+ *     values listed in (a) file(s) as a function of distance.
+ *
  */
-#define NUM_PARAMETER_FILES 2
+#define MAX_NUM_PARAMETER_FILES 100
+
+/*!
+ * \brief Hybrid style
+ *
+ */
+enum class HYBRIDSTYLE : int
+{
+  /*! None*/
+  NONE = 0,
+  /*! Ziegler-Biersack-Littmark (ZBL) pair interactions */
+  ZBL = 1,
+  /*! TABLE pair interactions */
+  TABLE = 2
+};
 
 /*! \class SNAPImplementation
  * \brief SNAP model driver Implementation class
@@ -253,6 +279,7 @@ private:
    * \param isComputeParticleEnergy ComputeParticleEnergy flag
    * \param isComputeVirial ComputeVirial flag
    * \param isComputeParticleVirial ComputeParticleVirial flag
+   * \param isHybrid Hybrid style flag
    *
    * \return int The computed Index
    */
@@ -262,7 +289,8 @@ private:
                       bool const isComputeForces,
                       bool const isComputeParticleEnergy,
                       bool const isComputeVirial,
-                      bool const isComputeParticleVirial) const;
+                      bool const isComputeParticleVirial,
+                      bool const isHybrid) const;
 
   /*!
    * \brief Use (possibly) new values of parameters to compute other quantities
@@ -345,6 +373,7 @@ private:
    * \tparam isComputeParticleEnergy ComputeParticleEnergy flag
    * \tparam isComputeVirial ComputeVirial flag
    * \tparam isComputeParticleVirial ComputeParticleVirial flag
+   * \tparam isHybrid Hybrid style flag
    *
    * \param modelCompute A %KIM API Model object
    * \param modelComputeArguments A %KIM API ComputeArguments object
@@ -365,7 +394,8 @@ private:
             bool isComputeForces,
             bool isComputeParticleEnergy,
             bool isComputeVirial,
-            bool isComputeParticleVirial>
+            bool isComputeParticleVirial,
+            bool isHybrid>
   int Compute(KIM::ModelCompute const *const modelCompute,
               KIM::ModelComputeArguments const *const modelComputeArguments,
               int const *const particleSpeciesCodes,
@@ -494,6 +524,62 @@ private:
 
   /*! SNAP object */
   std::unique_ptr<SNA> snap;
+
+  /* --- Hybrid style ---------------------------------------------------- */
+
+  /*! Number of all species */
+  int nAllSpecies;
+
+  /*! Names of all species */
+  std::vector<std::string> allSpeciesNames;
+
+  /*! Number of unique species in the hybrid style */
+  int nHybridStyleSpecies;
+
+  /*! Names of unique species */
+  std::vector<std::string> hybridStyleSpeciesNames;
+
+  /*! Species flag indicating how to compute the interaction */
+  Array2D<HYBRIDSTYLE> setflag;
+
+  /*! SNAP flag indicating if to compute the SNAP interaction based on indices */
+  std::vector<bool> snapflag;
+
+  /*! Indicator if there is any ZBL style */
+  int nzbls;
+
+  /*! 1 angstrom in native units */
+  double angstrom;
+
+  /*! Conversion of q^2/r to energy */
+  double qqr2e;
+
+  /*! 1 electron charge abs() in native units */
+  double qelectron;
+
+  /*! Distance where switching function in the ZBL interaction begins */
+  double inner;
+
+  /*! Distance Global cutoff for the ZBL interaction */
+  double outer;
+
+  /*! Atomic number for species */
+  std::vector<double> atomicNumber;
+
+  /*! ZBL object */
+  std::unique_ptr<ZBL> zbl;
+
+  /*! Indicator if there is any TABLE and their count */
+  int ntables;
+
+  /*! Array of TABLE objects */
+  std::vector<TABLE> tables;
+
+  /*! Table number index from the array of TABLE objects */
+  Array2D<int> tableNumber;
+
+  /*! Array of table style information */
+  std::vector<TABLE_INFO> tables_info;
 };
 
 #endif // SNAP_IMPLEMENTATION_HPP

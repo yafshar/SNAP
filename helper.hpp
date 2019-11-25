@@ -59,6 +59,10 @@
 #undef HELPER_LOG_ERROR
 #endif
 
+#ifdef HELPER_LOG_WARNING
+#undef HELPER_LOG_WARNING
+#endif
+
 /*!
  * \brief Helper macro for printing error message
  * formats messages, filename, line number and function
@@ -69,6 +73,16 @@
   {                                \
     std::ostringstream ss;         \
     ss << "\nError :" << __FILE__  \
+       << ":" << __LINE__ << ":@(" \
+       << __FUNCTION__ << ")\n"    \
+       << msg << "\n\n";           \
+    std::cerr << ss.str();         \
+  }
+
+#define HELPER_LOG_WARNING(msg)      \
+  {                                \
+    std::ostringstream ss;         \
+    ss << "\nWarning :" << __FILE__  \
        << ":" << __LINE__ << ":@(" \
        << __FUNCTION__ << ")\n"    \
        << msg << "\n\n";           \

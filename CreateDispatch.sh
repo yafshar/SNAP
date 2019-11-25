@@ -43,7 +43,8 @@ printf "                          isComputeEnergy,\n"          >> $flName
 printf "                          isComputeForces,\n"          >> $flName
 printf "                          isComputeParticleEnergy,\n"  >> $flName
 printf "                          isComputeVirial,\n"          >> $flName
-printf "                          isComputeParticleVirial))\n" >> $flName
+printf "                          isComputeParticleVirial,\n"  >> $flName
+printf "                          isHybrid))\n"                >> $flName
 printf "  {\n"                                                 >> $flName
 
 i=0
@@ -54,23 +55,24 @@ for processdE in false true; do
         for particleEnergy in false true; do
           for virial in false true; do
             for particleVirial in false true; do
-              printf "  case $i:\n"                                     >> $flName
-              printf "    ier = Compute<$processdE, $processd2E, "      >> $flName
-              printf "$energy, $force, "                                >> $flName
-              printf "$particleEnergy, $virial, "                       >> $flName
-              printf "$particleVirial>(\n"                              >> $flName
-              printf "        modelCompute,\n"                          >> $flName
-              printf "        modelComputeArguments,\n"                 >> $flName
-              printf "        particleSpeciesCodes,\n"                  >> $flName
-              printf "        particleContributing,\n"                  >> $flName
-              printf "        coordinates,\n"                           >> $flName
-              printf "        energy,\n"                                >> $flName
-              printf "        forces,\n"                                >> $flName
-              printf "        particleEnergy,\n"                        >> $flName
-              printf "        *virial,\n"                               >> $flName
-              printf "        particleVirial);\n"                       >> $flName
-              printf "    break;\n"                                     >> $flName
-              i=`expr $i + 1`
+              for hybrid in false true; do
+                printf "  case $i:\n"                                     >> $flName
+                printf "    ier = Compute<$processdE, $processd2E, "      >> $flName
+                printf "$energy, $force, $particleEnergy, "               >> $flName
+                printf "$virial, $particleVirial, $hybrid>(\n"            >> $flName
+                printf "        modelCompute,\n"                          >> $flName
+                printf "        modelComputeArguments,\n"                 >> $flName
+                printf "        particleSpeciesCodes,\n"                  >> $flName
+                printf "        particleContributing,\n"                  >> $flName
+                printf "        coordinates,\n"                           >> $flName
+                printf "        energy,\n"                                >> $flName
+                printf "        forces,\n"                                >> $flName
+                printf "        particleEnergy,\n"                        >> $flName
+                printf "        *virial,\n"                               >> $flName
+                printf "        particleVirial);\n"                       >> $flName
+                printf "    break;\n"                                     >> $flName
+                i=`expr $i + 1`
+              done  # hybrid
             done  # particleVirial
           done  # virial
         done  # particleEnergy
