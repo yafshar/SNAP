@@ -402,7 +402,8 @@ int TABLE::read_table(std::FILE *const filePointers, char const *keyword)
           rsq_lookup.i = i << nshiftbits;
           rsq_lookup.i |= maskhi;
         }
-        rnew = std::sqrtf(rsq_lookup.f);
+        float const rsq_lookup_f = std::sqrt(rsq_lookup.f);
+        rnew = static_cast<double>(rsq_lookup_f);
       }
 
       if (std::fabs(rnew - rold) / rold > EPSILONR)
@@ -772,7 +773,8 @@ int TABLE::compute_table()
         rsq_lookup.i |= maskhi;
       }
 
-      double const r = std::sqrtf(rsq_lookup.f);
+      float const rsq_lookup_f = std::sqrt(rsq_lookup.f);
+      double const r = static_cast<double>(rsq_lookup_f);
 
       rsq[i] = rsq_lookup.f;
 
@@ -849,7 +851,8 @@ int TABLE::compute_table()
       else
       {
         rsq_lookup.f = cut * cut;
-        double const r = std::sqrtf(rsq_lookup.f);
+        float const rsq_lookup_f = std::sqrt(rsq_lookup.f);
+        double const r = static_cast<double>(rsq_lookup_f);
 
         double const e_tmp = splint(rfile, efile, e2file, ninput, r);
         double const f_tmp = splint(rfile, ffile, f2file, ninput, r) / r;
