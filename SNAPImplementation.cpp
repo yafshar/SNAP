@@ -832,6 +832,22 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
       if (quadraticflag != 0 && quadraticflag != 1)
         quadraticflag = 1;
     }
+    else if (!std::strcmp(keywd, "diagonalstyle"))
+    {
+      int const diagonalstyle = std::atoi(keyval);
+      if (diagonalstyle != 3)
+      {
+        HELPER_LOG_ERROR("Incorrect SNAP parameter file.\n"
+                         "The 'diagonalstyle' keyword was removed in 2019 "
+                         "since all known SNAP potentials use the default "
+                         "value of '3'. (This keyword is kept only for "
+                         "backward compatibility.)\n"
+                         "Incorrect diagonalstyle value of " +
+                         std::string(keyval) +
+                         " is given.\n");
+        return true;
+      }
+    }
     else
     {
       HELPER_LOG_ERROR("Incorrect SNAP parameter file.\n"
