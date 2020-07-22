@@ -177,10 +177,10 @@ public:
    * \param rmin0_in Parameter in distance (distance units)
    * \param switchflag_in Flag for switching function
    * \param bzeroflag_in Flag indicating whether bzero subtracted from barray or not
-   * \param chemflag_in
-   * \param bnormflag_in
-   * \param wselfallflag_in
-   * \param nelements_in
+   * \param chemflag_in Flag indicating multi-element bispectrum components
+   * \param bnormflag_in Flag indicating barray should be divided by j+1
+   * \param wselfallflag_in Flag indicating to add wself to all element labelings
+   * \param nelements_in Number of unique elements
    */
   SNA(double const rfac0_in,
       int const twojmax_in,
