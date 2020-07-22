@@ -45,6 +45,15 @@ SNAP model driver
 The SNAP driver is written in C++ and it expects a SNAP coefficient file
 followed by a SNAP parameter file.
 
+1) The SNAP coefficient file, usually ends in the `.snapcoeff` extension.
+2) The SNAP parameter file, usually ends in the `.snapparam` extension.
+
+SNAP can be used in a hybrid style and in combination with a Ziegler-Biersack-Littmark (ZBL[2,3]) screened nuclear repulsion potential and any other two-body interaction in the table style[3,4] representation.
+
+3) Hybrid parameter file, usually ends in the `.hybridparam` extension.
+   It includes a Ziegler-Biersack-Littmark (ZBL) pair styles parameter, as well as pair interactions through table style(s).
+4) The interpolation table file(s) from potential energy and force values listed in (a) file(s) as a function of distance.
+
 Coefficient file format
 -----------------------
 The format of the SNAP coefficient file is as follows:
