@@ -2,7 +2,7 @@
     "author" "Yaser Afshar"
     "content-origin" "The model driver is implemented based on the SNAP package adapted from the LAMMPS software package and amended and updated by Yaser Afshar.\n\nLAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator http://lammps.sandia.gov"
     "contributor-id" "f9afb302-b4eb-4b55-a4e3-676ba64bfb77"
-    "description" "Spectral neighbor analysis potential (SNAP)[1] model driver.  \nIt uses bispectrum components to characterize the local neighborhood of each atom in a very general way. The driver is written in C++ and it\nexpects a SNAP coefficient file followed by a SNAP parameter file.\n\n1. Thompson, Swiler, Trott, Foiles, Tucker, \"Spectral neighbor analysis method\nfor automated generation of quantum-accurate interatomic potentials,\" J Comp\nPhys, 285, 316 (2015)."
+    "description" "Spectral neighbor analysis potential (SNAP)[1, 2] model driver. \nIt uses bispectrum components to characterize the local neighborhood of each atom in a very general way. The driver is written in C++ and it\nexpects a SNAP coefficient file followed by a SNAP parameter file.\n\n1. Thompson, Swiler, Trott, Foiles, Tucker, \"Spectral neighbor analysis method\nfor automated generation of quantum-accurate interatomic potentials,\" J Comp\nPhys, 285, 316 (2015)."
     "domain" "openkim.org"
     "executables" []
     "extended-id" "InProgress__MD_536750310735_000"
