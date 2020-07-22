@@ -260,7 +260,7 @@ Ions in Matter," Volume 1, Pergamon, (1985)
 
 ## Contributing
 
-Copyright (c) 2020, Regents of the University of Minnesota.\
+Copyright (c) 2019--2020, Regents of the University of Minnesota.\
 All rights reserved.
 
 Contributors:\
