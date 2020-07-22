@@ -1,6 +1,6 @@
 # Spectral Neighbor Analysis Potential (SNAP)
 
-This directory contains a spectral neighbor analysis potential (SNAP[1]) Driver. It uses bispectrum components to characterize the local neighborhood of each atom in a very general way.
+This directory contains a spectral neighbor analysis potential (SNAP[1, 5]) Driver. It uses bispectrum components to characterize the local neighborhood of each atom in a very general way.
 
 ## SNAP model driver
 
@@ -34,6 +34,47 @@ coeffs
 
 where, `coeffs` are SNAP coefficients, one per line.
 
+For example, below, see the SNAP coefficient file for a [SNAP potential for Tantalum (Ta)](https://openkim.org/id/SNAP_ThompsonSwilerTrott_2015_Ta__MO_359768485367_000)
+```bash
+# DATE: 2014-09-05 CONTRIBUTOR: Aidan Thompson athomps@sandia.gov CITATION: Thompson, Swiler, Trott, Foiles and Tucker, arxiv.org, 1409.3880 (2014)
+
+# LAMMPS SNAP coefficients for Ta_Cand06A
+
+1 31
+Ta 0.5 1
+-2.92477
+-0.01137
+-0.00775
+-0.04907
+-0.15047
+0.09157
+0.05590
+0.05785
+-0.11615
+-0.17122
+-0.10583
+0.03941
+-0.11284
+0.03939
+-0.07331
+-0.06582
+-0.09341
+-0.10587
+-0.15497
+0.04820
+0.00205
+0.00060
+-0.04898
+-0.05084
+-0.03371
+-0.01441
+-0.01501
+-0.00599
+-0.06373
+0.03965
+0.01072
+```
+
 ### Parameter file format
 
 The format of the SNAP parameter file is as follows:
@@ -45,8 +86,37 @@ Non-blank and non-comment lines must contain one keyword/value pair.
 keyword value
 ```
 
-The mandatory keywords are `rcutfac` and `twojmax`.
-Optional keywords are `rfac0`, `rmin0`, `switchflag`, `bzeroflag`, and `quadraticflag`.
+The mandatory keywords are:
+- `rcutfac`
+- `twojmax`
+
+Optional keywords are:
+- `rfac0`
+- `rmin0`
+- `switchflag`
+- `bzeroflag`
+- `quadraticflag`
+- `chemflag`
+- `bnormflag`
+- `wselfallflag`
+
+For example, below, see the SNAP parameter file for a [SNAP potential for Tantalum (Ta)](https://openkim.org/id/SNAP_ThompsonSwilerTrott_2015_Ta__MO_359768485367_000)
+```bash
+# DATE: 2014-09-05 CONTRIBUTOR: Aidan Thompson athomps@sandia.gov CITATION: Thompson, Swiler, Trott, Foiles and Tucker, arxiv.org, 1409.3880 (2014)
+
+# LAMMPS SNAP parameters for Ta_Cand06A
+
+# required
+rcutfac 4.67637
+twojmax 6
+
+# optional
+
+rfac0 0.99363
+rmin0 0
+bzeroflag 0
+quadraticflag 0
+```
 
 ## Hybrid style
 
@@ -144,22 +214,44 @@ i  i  table  1  tablefile.txt ii_keyword 4.0
 i  j  table  1  tablefile.txt ij_keyword 4.8
 ```
 
+
+Example `4`, below, see the SNAP HYBRID parameter file for a [SNAP potential for Tantalum (Ta)](https://openkim.org/id/SNAP_ThompsonSwilerTrott_2015_Ta__MO_359768485367_000)
+```bash
+# DATE: 2014-09-05 CONTRIBUTOR: Aidan Thompson athomps@sandia.gov CITATION: Thompson, Swiler, Trott, Foiles and Tucker, arxiv.org, 1409.3880 (2014)
+
+# Definition of SNAP potential Ta_Cand06A
+# Assumes 1 LAMMPS atom type
+
+
+# Number of elements for the hybrid style
+1
+
+# Number of elements names, (atom names)
+Ta
+
+# zbl  inner  outer
+zbl  4.0  4.8
+
+# Element_1  Element_2  zbl  Z_1  Z_2
+Ta  Ta  zbl  73  73
+```
+
 ## References
 
-1. [Thompson, Swiler, Trott, Foiles, and Tucker, "Spectral neighbor analysis
-method for automated generation of quantum-accurate interatomic potentials,"
-J Comp Phys, 285, 316 (2015)](https://www.sciencedirect.com/science/article/pii/S0021999114008353).
+1. [Thompson, A.P., Swiler, L.P., Trott, C.R., Foiles, S.M., and Tucker, G.J., "Spectral neighbor analysis method for automated generation of quantum-accurate interatomic potentials," J Comp Phys, 285, 316 (2015)](https://www.sciencedirect.com/science/article/pii/S0021999114008353).
 
-2. J.F. Ziegler, J. P. Biersack, and U. Littmark, “The Stopping and Range of
-Ions in Matter,” Volume 1, Pergamon, 1985.
+2. Ziegler, J.F., Biersack, J.P., and Littmark, U., "The Stopping and Range of
+Ions in Matter," Volume 1, Pergamon, (1985)
 
 3. [https://lammps.sandia.gov](https://lammps.sandia.gov)
 
 4. [https://lammps.sandia.gov/doc/pair_table.html](https://lammps.sandia.gov/doc/pair_table.html)
 
+5. [Cusentino, M.A., Wood, M.A., Thompson, A.P., "Explicit Multielement Extension of the Spectral Neighbor Analysis Potential for Chemically Complex Systems," J. Phys. Chem. A, 124, 5456 (2020)](https://pubs.acs.org/doi/full/10.1021/acs.jpca.0c02450)
+
 ## Contributing
 
-Copyright (c) 2019, Regents of the University of Minnesota.\
+Copyright (c) 2020, Regents of the University of Minnesota.\
 All rights reserved.
 
 Contributors:\

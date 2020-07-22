@@ -38,7 +38,7 @@
 //
 
 //
-// Copyright (c) 2019, Regents of the University of Minnesota.
+// Copyright (c) 2020, Regents of the University of Minnesota.
 // All rights reserved.
 //
 // Contributors:
@@ -48,7 +48,6 @@
 //        `lammps/src/SNAP/sna.h` and amended and updated by
 //        Yaser Afshar
 //
-
 
 #ifndef SNA_HPP
 #define SNA_HPP
@@ -178,12 +177,20 @@ public:
    * \param rmin0_in Parameter in distance (distance units)
    * \param switchflag_in Flag for switching function
    * \param bzeroflag_in Flag indicating whether bzero subtracted from barray or not
+   * \param chemflag_in
+   * \param bnormflag_in
+   * \param wselfallflag_in
+   * \param nelements_in
    */
   SNA(double const rfac0_in,
       int const twojmax_in,
       double const rmin0_in,
       int const switchflag_in,
-      int const bzeroflag_in);
+      int const bzeroflag_in,
+      int const chemflag_in,
+      int const bnormflag_in,
+      int const wselfallflag_in,
+      int const nelements_in);
 
   /*!
    * \brief Destroy the SNA object
@@ -206,13 +213,14 @@ public:
   // functions for bispectrum coefficients
 
   /*!
-   * \brief Compute Ui by summing over \c jnum neighbors
+   * \brief Compute Ui by summing over \c nneigh number of neighbors (\c jnum)
    *
    * Calculates all expansion coefficients for an atom i
    *
    * \param nneigh Number of neighbors
+   * \param ielem
    */
-  void compute_ui(int const nneigh);
+  void compute_ui(int const nneigh, int const ielem);
 
   /*!
    * \brief Compute Zi by summing over products of Ui
@@ -229,10 +237,11 @@ public:
   void compute_yi(double const *const beta);
 
   /*!
-   * \brief Compute Bi by summing conj(Ui)*Zi
+   * \brief Compute Bi by summing \c conj(Ui)*Zi
    *
+   * \param ielem
    */
-  void compute_bi();
+  void compute_bi(int const ielem);
 
   // functions for derivatives
 
@@ -246,8 +255,13 @@ public:
    * \param wj_in Dimensionless weights that are chosen to distinguish atoms of different types
    * \param rcut Cutoff distance
    * \param neigh_j Neighbor index
+   * \param jelem
    */
-  void compute_duidrj(double const *const rij_in, double const wj_in, double const rcut, int const neigh_j);
+  void compute_duidrj(double const *const rij_in,
+                      double const wj_in,
+                      double const rcut,
+                      int const neigh_j,
+                      int const jelem);
 
   /*!
    * \brief Calculate derivative of Bi w.r.t. atom j
@@ -335,8 +349,9 @@ private:
   /*!
    * \brief Set the ulisttot arrays to zero
    *
+   * \param ielem
    */
-  void zero_uarraytot();
+  void zero_uarraytot(int const ielem);
 
   /*!
    * \brief Add the weight for the central atom to the start of each block
@@ -352,8 +367,13 @@ private:
    * \param wj_in Dimensionless weights that are chosen to distinguish atoms of different types
    * \param rcut Cutoff distance
    * \param neigh_j Neighbor index
+   * \param jelem
    */
-  void add_uarraytot(double const r, double const wj_in, double const rcut, int const neigh_j);
+  void add_uarraytot(double const r,
+                     double const wj_in,
+                     double const rcut,
+                     int const neigh_j,
+                     int jelem);
 
   /*!
    * \brief Compute Wigner U-functions for one neighbor
@@ -369,7 +389,8 @@ private:
    * Euler angles are called Wigner’s D-functions
    *
    */
-  void compute_uarray(double const dx, double const dy, double const dz, double const z0, double const r, int const neigh_j);
+  void compute_uarray(double const dx, double const dy, double const dz,
+                      double const z0, double const r, int const neigh_j);
 
   /*!
    * \brief The function delta given by VMK Eq. 8.2(1)
@@ -384,10 +405,8 @@ private:
 
   /*!
    * \brief Compute the number of cpefficients
-   *
-   * \return int Number of cpefficients
    */
-  int compute_ncoeff();
+  void compute_ncoeff();
 
   /*!
    * \brief Compute derivatives of Wigner U-functions for one neighbor \sa compute_uarray()
@@ -435,6 +454,9 @@ public:
   /*! */
   Array2D<double> dblist;
 
+  /*! index on [0,nelements) */
+  std::vector<int> element;
+
 private:
   /*! Parameter in distance to angle conversion (distance units) */
   double rmin0;
@@ -465,12 +487,36 @@ private:
   int bzeroflag;
 
   /*!
+   * \brief This flag is set to 1 for multi-element bispectrum components
+   */
+  int chemflag;
+
+  /*!
+   * \brief This flag is set to 1 if barray divided by j+1
+   */
+  int bnormflag;
+
+  /*!
+   * \brief This flag is set to 1 for adding wself to all element labelings
+   */
+  int wselfallflag;
+
+  /*! Number of elements */
+  int nelements;
+
+  /*!
    * \brief Dimensionless weight for the central atom.
    *
    * \note
    * The central atom is arbitrarily assigned a unit weight.
    */
   double wself;
+
+  /*! Number of multi-element pairs */
+  int ndoubles;
+
+  /*! Number of multi-element triplets */
+  int ntriples;
 
   /*! Index counter */
   int idxcg_max;
@@ -483,6 +529,9 @@ private:
 
   /*! Index counter */
   int idxb_max;
+
+  /*! Element of j in derivative */
+  int elem_duarray;
 
   // data for bispectrum coefficients
   std::vector<SNA_ZINDICES> idxz;

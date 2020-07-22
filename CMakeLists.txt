@@ -23,7 +23,7 @@
 #
 
 #
-# Copyright (c) 2013--2019, Regents of the University of Minnesota.
+# Copyright (c) 2013--2020, Regents of the University of Minnesota.
 # All rights reserved.
 #
 # Contributors:
@@ -51,7 +51,7 @@ endif()
 # This model driver requires C++11
 set(CMAKE_CXX_STANDARD 11)
 
-set(MODEL_DRIVER_NAME "SNAP__MD_536750310735_000")
+set(MODEL_DRIVER_NAME "SNAP__MD_536750310735_001")
 
 add_kim_api_model_driver_library(
   NAME                    ${MODEL_DRIVER_NAME}

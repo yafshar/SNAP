@@ -23,7 +23,7 @@
 //
 
 //
-// Copyright (c) 2019, Regents of the University of Minnesota.
+// Copyright (c) 2020, Regents of the University of Minnesota.
 // All rights reserved.
 //
 // Contributors:
@@ -482,6 +482,31 @@ private:
    * 1 = generate quadratic terms
    */
   int quadraticflag;
+
+  /*!
+   * \brief bnormflag flag
+   *
+   * bnormflag value = 0 or 1
+   * 1 = if barray divided by j+1
+   */
+  int bnormflag;
+
+  /*!
+   * \brief chemflag flag
+   *
+   * chemflag value = 0 or 1
+   * 1 = for multi-element bispectrum components
+   */
+  int chemflag;
+
+  /*!
+   * \brief wselfallflag flag
+   *
+   * wselfallflag value = 0 or 1
+   * 0 = do not add wself to all element labelings
+   * 1 = add wself to all element labelings
+   */
+  int wselfallflag;
 
   /*! length of beta */
   int beta_max;

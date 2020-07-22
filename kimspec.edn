@@ -1,19 +1,36 @@
-{"author" "Yaser Afshar"
- "content-origin" "The model driver is implemented based on the SNAP package adapted from the LAMMPS software package and amended and updated by Yaser Afshar.\n\nLAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator http://lammps.sandia.gov"
- "contributor-id" "f9afb302-b4eb-4b55-a4e3-676ba64bfb77"
- "description" "Spectral neighbor analysis potential (SNAP)[1] model driver.  \nIt uses bispectrum components to characterize the local neighborhood of each atom in a very general way. The driver is written in C++ and it\nexpects a SNAP coefficient file followed by a SNAP parameter file.\n\n1. Thompson, Swiler, Trott, Foiles, Tucker, \"Spectral neighbor analysis method\nfor automated generation of quantum-accurate interatomic potentials,\" J Comp\nPhys, 285, 316 (2015)."
- "domain" "openkim.org"
- "executables" []
- "extended-id" "InProgress__MD_536750310735_000"
- "kim-api-version" "2.0"
- "maintainer-id" "f9afb302-b4eb-4b55-a4e3-676ba64bfb77"
- "source-citations" [{"author" "Thompson, A.P. and Swiler, L.P. and Trott, C.R. and Foiles, S.M. and Tucker, G.J."
-                      "journal" "Journal of Computational Physics"
-                      "doi" "10.1016/j.jcp.2014.12.018"
-                      "pages" "316--330"
-                      "recordkey" "MD_536750310735_000a"
-                      "recordtype" "article"
-                      "title" "Spectral neighbor analysis method for automated generation of quantum-accurate interatomic potentials"
-                      "volume" "285"
-                      "year" "2015"}]
- "title" "Spectral neighbor analysis (SNAP) potential"}
+{
+    "author" "Yaser Afshar"
+    "content-origin" "The model driver is implemented based on the SNAP package adapted from the LAMMPS software package and amended and updated by Yaser Afshar.\n\nLAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator http://lammps.sandia.gov"
+    "contributor-id" "f9afb302-b4eb-4b55-a4e3-676ba64bfb77"
+    "description" "Spectral neighbor analysis potential (SNAP)[1] model driver.  \nIt uses bispectrum components to characterize the local neighborhood of each atom in a very general way. The driver is written in C++ and it\nexpects a SNAP coefficient file followed by a SNAP parameter file.\n\n1. Thompson, Swiler, Trott, Foiles, Tucker, \"Spectral neighbor analysis method\nfor automated generation of quantum-accurate interatomic potentials,\" J Comp\nPhys, 285, 316 (2015)."
+    "domain" "openkim.org"
+    "executables" []
+    "extended-id" "InProgress__MD_536750310735_000"
+    "kim-api-version" "2.0"
+    "maintainer-id" "f9afb302-b4eb-4b55-a4e3-676ba64bfb77"
+    "source-citations" [
+        {
+            "author" "Thompson, A.P. and Swiler, L.P. and Trott, C.R. and Foiles, S.M. and Tucker, G.J."
+            "journal" "Journal of Computational Physics"
+            "doi" "10.1016/j.jcp.2014.12.018"
+            "pages" "316--330"
+            "recordkey" "MD_536750310735_000a"
+            "recordtype" "article"
+            "title" "Spectral neighbor analysis method for automated generation of quantum-accurate interatomic potentials"
+            "volume" "285"
+            "year" "2015"
+        }
+        {
+            "author" "Cusentino, M.A. and Wood, M.A. and Thompson, A.P."
+            "journal" "Journal of Physical Chemistry A"
+            "doi" "10.1021/acs.jpca.0c02450"
+            "pages" "5456--5464"
+            "recordkey" "MD_536750310735_001a"
+            "recordtype" "article"
+            "title" "Explicit Multielement Extension of the Spectral Neighbor Analysis Potential for Chemically Complex Systems"
+            "volume" "124"
+            "year" "2020"
+        }
+    ]
+    "title" "Spectral neighbor analysis (SNAP) potential"
+}
