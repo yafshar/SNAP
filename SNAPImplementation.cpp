@@ -603,20 +603,25 @@ int SNAPImplementation::OpenParameterFiles(KIM::ModelDriverCreate *const modelDr
                                            int const numberParameterFiles,
                                            std::FILE **parameterFilePointers)
 {
+  std::string const *parameterFileDirectoryName;
+  modelDriverCreate->GetParameterFileDirectoryName(&parameterFileDirectoryName);
+
   for (int i = 0; i < numberParameterFiles; ++i)
   {
-    std::string const *parameterFileName;
+    std::string const *parameterFileBasename;
 
-    if (modelDriverCreate->GetParameterFileName(i, &parameterFileName))
+    if (modelDriverCreate->GetParameterFileBasename(i, &parameterFileBasename))
     {
-      LOG_ERROR("Unable to get the parameter file name\n");
+      LOG_ERROR("Unable to get the parameter file base name\n");
       return true;
     }
+
+    std::string const parameterFileName = *parameterFileDirectoryName + "/" + *parameterFileBasename;
 
     parameterFilePointers[i] = std::fopen(parameterFileName->c_str(), "r");
     if (!parameterFilePointers[i])
     {
-      HELPER_LOG_ERROR("The parameter file (" + *parameterFileName + ") can not be opened\n");
+      HELPER_LOG_ERROR("The parameter file (" + *parameterFileBasename + ") can not be opened\n");
       for (int j = i - 1; i <= 0; --i)
       {
         std::fclose(parameterFilePointers[j]);
@@ -1251,13 +1256,6 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
             return true;
           }
 
-          // Table keyword
-          if (!keyval5)
-          {
-            HELPER_LOG_ERROR("Incorrect table style in the Hybrid parameter file (No keyword).\n");
-            return true;
-          }
-
           int const sn = tableStyleNumber - 1;
           int const nt = nTables++;
 
@@ -1265,76 +1263,35 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
           TABLE tt(tables_info[sn].tableStyle, tables_info[sn].tableLength);
           tables[nt] = std::move(tt);
 
-          std::string const *tableFileName;
-
           int tableFileNumber = 3;
           for (; tableFileNumber < numberParameterFiles; ++tableFileNumber)
           {
-            // if (modelDriverCreate->GetParameterFileName(tableFileNumber, &tableFileName))
-            // {
-            //   LOG_ERROR("Unable to get the table file name.\n");
-            //   return true;
-            // }
+            std::string const *parameterFileBasename;
 
-            // A hack to make it work
-            //
-            // KIM-API, resgisters the table file name using a unique random
-            // string which is different from the tabulated file name in the
-            // hybrid parameter file, thus we use the unqiue heywords for
-            // each interaction pair to find the associated file
-
-            bool findMatch(false);
-
+            if (modelDriverCreate->GetParameterFileBasename(tableFileNumber, &parameterFileBasename))
             {
-              // Rewind the file in case it is in the middle of the file
-              if (std::fseek(parameterFilePointers[tableFileNumber], 0, SEEK_SET))
-              {
-                HELPER_LOG_ERROR("Failed to rewind the file.\n");
-                return true;
-              }
-
-              char tmpNextLine[MAXLINE];
-
-              // Loop until section found with matching keyword
-              while (1)
-              {
-                GetNextDataLine(parameterFilePointers[tableFileNumber], tmpNextLine, MAXLINE, &endOfFileFlag);
-                if (endOfFileFlag)
-                {
-                  break;
-                }
-
-                char *word = std::strtok(tmpNextLine, " \t\n\r");
-
-                // matching keyword
-                if (!std::strcmp(word, keyval5))
-                {
-                  findMatch = true;
-                  break;
-                }
-              } // End of loop to find the matching keyword
+              LOG_ERROR("Unable to get the parameter file base name\n");
+              return true;
             }
 
-            if (findMatch)
+            if (!std::strcmp(keyval4, *parameterFileBasename->c_str()))
             {
               break;
             }
-
-            // if (!std::strcmp(keyval4, tableFileName->c_str()))
-            // {
-            //   break;
-            // }
-
           } // End of loop throug the number of registered parameter files
 
           if (tableFileNumber >= numberParameterFiles)
           {
             HELPER_LOG_ERROR("Incorrect TABLE filename '" +
                              std::string(keyval4) +
-                             "' in the Hybrid parameter file.\n"
-                             "and/or failed to find the unique keyword '" +
-                             std::string(keyval5) +
-                             "' in the tabulated filename.\n");
+                             "' in the Hybrid parameter file.\n");
+            return true;
+          }
+
+          // Table keyword
+          if (!keyval5)
+          {
+            HELPER_LOG_ERROR("Incorrect table style in the Hybrid parameter file (No table keyword).\n");
             return true;
           }
 
