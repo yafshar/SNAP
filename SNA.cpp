@@ -55,12 +55,6 @@
 
 #include <algorithm>
 
-#ifdef MY_PI
-#undef MY_PI
-#endif
-
-#define MY_PI 3.14159265358979323846 // pi
-
 SNA::SNA(double const rfac0_in,
          int const twojmax_in,
          double const rmin0_in,
@@ -279,7 +273,7 @@ void SNA::compute_ui(int const jnum, int const ielem)
     double const rsq = dx * dx + dy * dy + dz * dz;
     double const r = std::sqrt(rsq);
 
-    double const theta0 = (r - rmin0) * rfac0 * MY_PI / (rcutij[j] - rmin0);
+    double const theta0 = (r - rmin0) * rfac0 * MathConst::MY_PI / (rcutij[j] - rmin0);
     double const z0 = r / std::tan(theta0);
 
     compute_uarray(dx, dy, dz, z0, r, j);
@@ -916,7 +910,7 @@ void SNA::compute_duidrj(double const *const rij_in,
   double const rsq = dx * dx + dy * dy + dz * dz;
   double const r = std::sqrt(rsq);
 
-  double const rscale0 = rfac0 * MY_PI / (rcut - rmin0);
+  double const rscale0 = rfac0 * MathConst::MY_PI / (rcut - rmin0);
   double const theta0 = (r - rmin0) * rscale0;
 
   double const cs = std::cos(theta0);
@@ -1459,7 +1453,7 @@ double SNA::compute_sfac(double const r, double const rcut)
   }
   else
   {
-    double const rcutfac = MY_PI / (rcut - rmin0);
+    double const rcutfac = MathConst::MY_PI / (rcut - rmin0);
     return 0.5 * (std::cos((r - rmin0) * rcutfac) + 1.0);
   }
 }
@@ -1477,10 +1471,9 @@ double SNA::compute_dsfac(double const r, double const rcut)
   }
   else
   {
-    double const rcutfac = MY_PI / (rcut - rmin0);
+    double const rcutfac = MathConst::MY_PI / (rcut - rmin0);
     return -0.5 * std::sin((r - rmin0) * rcutfac) * rcutfac;
   }
 }
 
-#undef MY_PI
 #undef HELPER_LOG_ERROR

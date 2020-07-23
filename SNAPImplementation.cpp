@@ -618,7 +618,7 @@ int SNAPImplementation::OpenParameterFiles(KIM::ModelDriverCreate *const modelDr
 
     std::string const parameterFileName = *parameterFileDirectoryName + "/" + *parameterFileBasename;
 
-    parameterFilePointers[i] = std::fopen(parameterFileName->c_str(), "r");
+    parameterFilePointers[i] = std::fopen(parameterFileName.c_str(), "r");
     if (!parameterFilePointers[i])
     {
       HELPER_LOG_ERROR("The parameter file (" + *parameterFileBasename + ") can not be opened\n");
@@ -1274,7 +1274,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
               return true;
             }
 
-            if (!std::strcmp(keyval4, *parameterFileBasename->c_str()))
+            if (!std::strcmp(keyval4, (*parameterFileBasename).c_str()))
             {
               break;
             }
@@ -2121,11 +2121,11 @@ void SNAPImplementation::computeBispectrum(KIM::ModelComputeArguments const *con
 
       if (chemflag)
       {
-        snaptr->compute_bi(iSpecies);
+        snap->compute_bi(iSpecies);
       }
       else
       {
-        snaptr->compute_bi(0);
+        snap->compute_bi(0);
       }
 
       auto Bi = bispectrum.data_1D(contributing_index++);

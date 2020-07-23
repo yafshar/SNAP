@@ -581,4 +581,9 @@ private:
   Array3D<int> idxb_block;
 };
 
+namespace MathConst
+{
+  static const double MY_PI = 3.14159265358979323846; // pi
+}
+
 #endif // SNA_HPP

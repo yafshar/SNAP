@@ -484,20 +484,20 @@ private:
   int quadraticflag;
 
   /*!
-   * \brief bnormflag flag
-   *
-   * bnormflag value = 0 or 1
-   * 1 = if barray divided by j+1
-   */
-  int bnormflag;
-
-  /*!
    * \brief chemflag flag
    *
    * chemflag value = 0 or 1
    * 1 = for multi-element bispectrum components
    */
   int chemflag;
+
+  /*!
+   * \brief bnormflag flag
+   *
+   * bnormflag value = 0 or 1
+   * 1 = if barray divided by j+1
+   */
+  int bnormflag;
 
   /*!
    * \brief wselfallflag flag
