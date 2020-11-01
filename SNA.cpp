@@ -528,8 +528,8 @@ void SNA::compute_deidrj(double *const dedr)
         double const jjjmambyarray_r = ylist_r[jelem * idxu_max + jju];
         double const jjjmambyarray_i = ylist_i[jelem * idxu_max + jju];
 
-        auto dudr_r = dulist_r.data_1D(jju);
-        auto dudr_i = dulist_i.data_1D(jju);
+        double const *const dudr_r = &dulist_r(jju, 0);
+        double const *const dudr_i = &dulist_i(jju, 0);
 
         dedr[0] += dudr_r[0] * jjjmambyarray_r + dudr_i[0] * jjjmambyarray_i;
         dedr[1] += dudr_r[1] * jjjmambyarray_r + dudr_i[1] * jjjmambyarray_i;
@@ -546,8 +546,8 @@ void SNA::compute_deidrj(double *const dedr)
         double const jjjmambyarray_r = ylist_r[jelem * idxu_max + jju];
         double const jjjmambyarray_i = ylist_i[jelem * idxu_max + jju];
 
-        auto dudr_r = dulist_r.data_1D(jju);
-        auto dudr_i = dulist_i.data_1D(jju);
+        double const *const dudr_r = &dulist_r(jju, 0);
+        double const *const dudr_i = &dulist_i(jju, 0);
 
         dedr[0] += dudr_r[0] * jjjmambyarray_r + dudr_i[0] * jjjmambyarray_i;
         dedr[1] += dudr_r[1] * jjjmambyarray_r + dudr_i[1] * jjjmambyarray_i;
@@ -558,8 +558,8 @@ void SNA::compute_deidrj(double *const dedr)
         double const jjjmambyarray_r = ylist_r[jelem * idxu_max + jju];
         double const jjjmambyarray_i = ylist_i[jelem * idxu_max + jju];
 
-        auto dudr_r = dulist_r.data_1D(jju);
-        auto dudr_i = dulist_i.data_1D(jju);
+        double const *const dudr_r = &dulist_r(jju, 0);
+        double const *const dudr_i = &dulist_i(jju, 0);
 
         dedr[0] += (dudr_r[0] * jjjmambyarray_r + dudr_i[0] * jjjmambyarray_i) * 0.5;
         dedr[1] += (dudr_r[1] * jjjmambyarray_r + dudr_i[1] * jjjmambyarray_i) * 0.5;
@@ -676,7 +676,7 @@ void SNA::compute_dbidrj()
         {
           int const itriple = (elem1 * nelements + elem2) * nelements + elem3;
 
-          auto dbdr = dblist.data_1D(itriple * idxb_max + jjb);
+          double *const dbdr = &dblist(itriple * idxb_max + jjb, 0);
 
           dbdr[0] = 0.0;
           dbdr[1] = 0.0;
@@ -699,7 +699,7 @@ void SNA::compute_dbidrj()
       {
         {
           int const itriple = (elem1 * nelements + elem2) * nelements + elem3;
-          auto dbdr = dblist.data_1D(itriple * idxb_max + jjb);
+          double *const dbdr = &dblist(itriple * idxb_max + jjb, 0);
 
           int const idouble = elem1 * nelements + elem2;
           double *const zptr_r = &zlist_r[idouble * idxz_max];
@@ -717,8 +717,8 @@ void SNA::compute_dbidrj()
           {
             for (int ma = 0; ma <= j; ++ma, ++jjz, ++jju)
             {
-              auto dudr_r = dulist_r.data_1D(jju);
-              auto dudr_i = dulist_i.data_1D(jju);
+              double const *const dudr_r = &dulist_r(jju, 0);
+              double const *const dudr_i = &dulist_i(jju, 0);
 
               sumzdu_r[0] += dudr_r[0] * zptr_r[jjz] + dudr_i[0] * zptr_i[jjz];
               sumzdu_r[1] += dudr_r[1] * zptr_r[jjz] + dudr_i[1] * zptr_i[jjz];
@@ -732,8 +732,8 @@ void SNA::compute_dbidrj()
             int const mb = j / 2;
             for (int ma = 0; ma < mb; ++ma, ++jjz, ++jju)
             {
-              auto dudr_r = dulist_r.data_1D(jju);
-              auto dudr_i = dulist_i.data_1D(jju);
+              double const *const dudr_r = &dulist_r(jju, 0);
+              double const *const dudr_i = &dulist_i(jju, 0);
 
               sumzdu_r[0] += dudr_r[0] * zptr_r[jjz] + dudr_i[0] * zptr_i[jjz];
               sumzdu_r[1] += dudr_r[1] * zptr_r[jjz] + dudr_i[1] * zptr_i[jjz];
@@ -741,8 +741,8 @@ void SNA::compute_dbidrj()
             }
 
             {
-              auto dudr_r = dulist_r.data_1D(jju);
-              auto dudr_i = dulist_i.data_1D(jju);
+              double const *const dudr_r = &dulist_r(jju, 0);
+              double const *const dudr_i = &dulist_i(jju, 0);
 
               sumzdu_r[0] += (dudr_r[0] * zptr_r[jjz] + dudr_i[0] * zptr_i[jjz]) * 0.5;
               sumzdu_r[1] += (dudr_r[1] * zptr_r[jjz] + dudr_i[1] * zptr_i[jjz]) * 0.5;
@@ -758,7 +758,7 @@ void SNA::compute_dbidrj()
         // Sum over Conj(dudr(j1,ma1,mb1))*z(j,j2,j1,ma1,mb1)
         {
           int const itriple = (elem3 * nelements + elem2) * nelements + elem1;
-          auto dbdr = dblist.data_1D(itriple * idxb_max + jjb);
+          double *const dbdr = &dblist(itriple * idxb_max + jjb, 0);
 
           int const idouble = elem1 * nelements + elem2;
           double *const zptr_r = &zlist_r[idouble * idxz_max];
@@ -776,8 +776,8 @@ void SNA::compute_dbidrj()
           {
             for (int ma = 0; ma <= j1; ++ma, ++jjz, ++jju)
             {
-              auto dudr_r = dulist_r.data_1D(jju);
-              auto dudr_i = dulist_i.data_1D(jju);
+              double const *const dudr_r = &dulist_r(jju, 0);
+              double const *const dudr_i = &dulist_i(jju, 0);
 
               sumzdu_r[0] += dudr_r[0] * zptr_r[jjz] + dudr_i[0] * zptr_i[jjz];
               sumzdu_r[1] += dudr_r[1] * zptr_r[jjz] + dudr_i[1] * zptr_i[jjz];
@@ -791,8 +791,8 @@ void SNA::compute_dbidrj()
             int const mb = j1 / 2;
             for (int ma = 0; ma < mb; ++ma, ++jjz, ++jju)
             {
-              auto dudr_r = dulist_r.data_1D(jju);
-              auto dudr_i = dulist_i.data_1D(jju);
+              double const *const dudr_r = &dulist_r(jju, 0);
+              double const *const dudr_i = &dulist_i(jju, 0);
 
               sumzdu_r[0] += dudr_r[0] * zptr_r[jjz] + dudr_i[0] * zptr_i[jjz];
               sumzdu_r[1] += dudr_r[1] * zptr_r[jjz] + dudr_i[1] * zptr_i[jjz];
@@ -800,8 +800,8 @@ void SNA::compute_dbidrj()
             }
 
             {
-              auto dudr_r = dulist_r.data_1D(jju);
-              auto dudr_i = dulist_i.data_1D(jju);
+              double const *const dudr_r = &dulist_r(jju, 0);
+              double const *const dudr_i = &dulist_i(jju, 0);
 
               sumzdu_r[0] += (dudr_r[0] * zptr_r[jjz] + dudr_i[0] * zptr_i[jjz]) * 0.5;
               sumzdu_r[1] += (dudr_r[1] * zptr_r[jjz] + dudr_i[1] * zptr_i[jjz]) * 0.5;
@@ -827,7 +827,7 @@ void SNA::compute_dbidrj()
         // Sum over Conj(dudr(j2,ma2,mb2))*z(j,j1,j2,ma2,mb2)
         {
           int const itriple = (elem1 * nelements + elem3) * nelements + elem2;
-          auto dbdr = dblist.data_1D(itriple * idxb_max + jjb);
+          double *const dbdr = &dblist(itriple * idxb_max + jjb, 0);
 
           int const idouble = elem2 * nelements + elem1;
           double *const zptr_r = &zlist_r[idouble * idxz_max];
@@ -845,8 +845,8 @@ void SNA::compute_dbidrj()
           {
             for (int ma = 0; ma <= j2; ++ma, ++jjz, ++jju)
             {
-              auto dudr_r = dulist_r.data_1D(jju);
-              auto dudr_i = dulist_i.data_1D(jju);
+              double const *const dudr_r = &dulist_r(jju, 0);
+              double const *const dudr_i = &dulist_i(jju, 0);
 
               sumzdu_r[0] += dudr_r[0] * zptr_r[jjz] + dudr_i[0] * zptr_i[jjz];
               sumzdu_r[1] += dudr_r[1] * zptr_r[jjz] + dudr_i[1] * zptr_i[jjz];
@@ -860,8 +860,8 @@ void SNA::compute_dbidrj()
             int const mb = j2 / 2;
             for (int ma = 0; ma < mb; ++ma, ++jjz, ++jju)
             {
-              auto dudr_r = dulist_r.data_1D(jju);
-              auto dudr_i = dulist_i.data_1D(jju);
+              double const *const dudr_r = &dulist_r(jju, 0);
+              double const *const dudr_i = &dulist_i(jju, 0);
 
               sumzdu_r[0] += dudr_r[0] * zptr_r[jjz] + dudr_i[0] * zptr_i[jjz];
               sumzdu_r[1] += dudr_r[1] * zptr_r[jjz] + dudr_i[1] * zptr_i[jjz];
@@ -869,8 +869,8 @@ void SNA::compute_dbidrj()
             }
 
             {
-              auto dudr_r = dulist_r.data_1D(jju);
-              auto dudr_i = dulist_i.data_1D(jju);
+              double const *const dudr_r = &dulist_r(jju, 0);
+              double const *const dudr_i = &dulist_i(jju, 0);
 
               sumzdu_r[0] += (dudr_r[0] * zptr_r[jjz] + dudr_i[0] * zptr_i[jjz]) * 0.5;
               sumzdu_r[1] += (dudr_r[1] * zptr_r[jjz] + dudr_i[1] * zptr_i[jjz]) * 0.5;
@@ -981,8 +981,8 @@ void SNA::add_uarraytot(double const r,
 {
   double const sfac = compute_sfac(r, rcut) * wj_in;
 
-  double *const ulist_r = ulist_r_ij.data_1D(neigh_j).data();
-  double *const ulist_i = ulist_i_ij.data_1D(neigh_j).data();
+  double *const ulist_r = &ulist_r_ij(neigh_j, 0);
+  double *const ulist_i = &ulist_i_ij(neigh_j, 0);
 
   if (jelem)
   {
@@ -1042,8 +1042,8 @@ void SNA::compute_uarray(double const dx,
 
   // VMK Section 4.8.2
 
-  double *ulist_r = ulist_r_ij.data_1D(neigh_j).data();
-  double *ulist_i = ulist_i_ij.data_1D(neigh_j).data();
+  double *const ulist_r = &ulist_r_ij(neigh_j, 0);
+  double *const ulist_i = &ulist_i_ij(neigh_j, 0);
 
   ulist_r[0] = 1.0;
   ulist_i[0] = 0.0;
@@ -1156,8 +1156,8 @@ void SNA::compute_duarray(double const dx, double const dy, double const dz,
   db_i[1] = -dx * dr0inv[1];
   db_i[2] = -dx * dr0inv[2];
 
-  double *ulist_r = ulist_r_ij.data_1D(neigh_j).data();
-  double *ulist_i = ulist_i_ij.data_1D(neigh_j).data();
+  double *const ulist_r = &ulist_r_ij(neigh_j, 0);
+  double *const ulist_i = &ulist_i_ij(neigh_j, 0);
 
   dulist_r(0, 0) = 0.0;
   dulist_r(0, 1) = 0.0;

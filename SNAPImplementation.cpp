@@ -2128,7 +2128,7 @@ void SNAPImplementation::computeBispectrum(KIM::ModelComputeArguments const *con
         snap->compute_bi(0);
       }
 
-      auto Bi = bispectrum.data_1D(contributing_index++);
+      double *const Bi = &bispectrum(contributing_index++, 0);
       for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
       {
         Bi[icoeff] = snap->blist[icoeff];
@@ -2159,13 +2159,11 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes, int const 
 
       {
         // Get the 1D view to the 2D coeffelem array at row iSpecies
-        auto coeffi = coeffelem.data_1D(iSpecies);
-
         // Get the pointer to the raw data + 1 to avoid extra sum
-        double *Ci = coeffi.data() + 1;
+        double *Ci = &coeffelem(iSpecies, 1);
 
         // Get the 1D view to the 2D beta array at row i
-        auto bi = beta.data_1D(contributing_index);
+        double *const bi = &beta(contributing_index, 0);
 
         for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
         {
@@ -2176,7 +2174,7 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes, int const 
         --Ci;
 
         // Get the 1D view to the 2D bispectrum array at row i
-        auto Bi = bispectrum.data_1D(contributing_index++);
+        double const *const Bi = &bispectrum(contributing_index++, 0);
 
         int k = ncoeff + 1;
 
@@ -2210,13 +2208,11 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes, int const 
       if (snapflag[iSpecies])
       {
         // Get the 1D view to the 2D coeffelem array at row iSpecies
-        auto coeffi = coeffelem.data_1D(iSpecies);
-
         // Get the pointer to the raw data + 1 to avoid extra sum
-        double *Ci = coeffi.data() + 1;
+        double *Ci = &coeffelem(iSpecies, 1);
 
         // Get the 1D view to the 2D beta array at row i
-        auto bi = beta.data_1D(contributing_index++);
+        double *const bi = &beta(contributing_index++, 0);
 
         for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
         {
@@ -2424,11 +2420,9 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
         }
 
         // Get the 1D view to the 2D beta array at row i
-        auto betai = beta.data_1D(contributing_index);
-
         // Get the pointer to the beta array of data for atom i
-        double const *const bi = const_cast<double *>(betai.data());
-
+        double const *const bi = &beta(contributing_index, 0);
+        
         snap->compute_yi(bi);
       }
       else
@@ -2498,10 +2492,8 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
         }
 
         // Get the 1D view to the 2D snap->rij array at row n
-        auto rij = snap->rij.data_1D(n);
-
         // Get the pointer to the rij_const array of data
-        double const *const rij_const = const_cast<double *>(rij.data());
+        double const *const rij_const = &snap->rij(n, 0);
 
         double const rsq = rij_const[0] * rij_const[0] + rij_const[1] * rij_const[1] + rij_const[2] * rij_const[2];
         double const rrsq = std::sqrt(rsq);
@@ -2848,17 +2840,17 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
           // Energy of particle i, sum over coeffs_k * Bi_k
 
           // Get the 1D view to the 2D coeffelem array at row iSpecies
-          auto coeffi = coeffelem.data_1D(iSpecies);
+          double *Ci = &coeffelem(iSpecies, 0);
 
           // Compute phi
-          double phi = coeffi[0];
+          double phi = Ci[0];
 
           // Get the pointer to the raw data + 1 to avoid extra summation
-          double *Ci = coeffi.data() + 1;
+          ++Ci;
 
           // Get the bispectrum of particle i
           // Get the 1D view to the 2D bispectrum array at row i
-          auto Bi = bispectrum.data_1D(contributing_index);
+          double const *const Bi = &bispectrum(contributing_index, 0);
 
           // E = beta.B + 0.5*B^t.alpha.B
 
@@ -2986,11 +2978,9 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
         }
 
         // Get the 1D view to the 2D beta array at row i
-        auto betai = beta.data_1D(contributing_index);
-
         // Get the pointer to the beta array of data for atom i
-        double const *const bi = const_cast<double *>(betai.data());
-
+        double const *const bi = &beta(contributing_index, 0);
+        
         snap->compute_yi(bi);
       }
 
@@ -3005,11 +2995,9 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
       for (int n = 0; n < ninside; ++n)
       {
         // Get the 1D view to the 2D snap->rij array at row n
-        auto rij = snap->rij.data_1D(n);
-
         // Get the pointer to the rij_const array of data
-        double const *const rij_const = const_cast<double *>(rij.data());
-
+        double const *const rij_const = &snap->rij(n, 0);
+        
         if (chemflag)
         {
           snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], n, snap->element[n]);
@@ -3107,17 +3095,17 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
         // Energy of particle i, sum over coeffs_k * Bi_k
 
         // Get the 1D view to the 2D coeffelem array at row iSpecies
-        auto coeffi = coeffelem.data_1D(iSpecies);
+        double *Ci = &coeffelem(iSpecies, 0);
 
         // Compute phi
-        double phi = coeffi[0];
+        double phi = Ci[0];
 
         // Get the pointer to the raw data + 1 to avoid extra summation
-        double *Ci = coeffi.data() + 1;
+        ++Ci;
 
         // Get the bispectrum of particle i
         // Get the 1D view to the 2D bispectrum array at row i
-        auto Bi = bispectrum.data_1D(contributing_index);
+        double const *const Bi = &bispectrum(contributing_index, 0);
 
         // E = beta.B + 0.5*B^t.alpha.B
 
