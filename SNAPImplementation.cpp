@@ -23,14 +23,13 @@
 //
 
 //
-// Copyright (c) 2019, Regents of the University of Minnesota.
+// Copyright (c) 2019--2020, Regents of the University of Minnesota.
 // All rights reserved.
 //
 // Contributors:
 //    Yaser Afshar
 //    Ryan S. Elliott
 //
-
 
 #include "KIM_ModelDriverHeaders.hpp"
 #include "KIM_LogMacros.hpp"
@@ -87,6 +86,9 @@ SNAPImplementation::SNAPImplementation(
                       switchflag(1),    // Set defaults for optional keywords
                       bzeroflag(1),     // Set defaults for optional keywords
                       quadraticflag(0), // Set defaults for optional keywords
+                      chemflag(0),
+                      bnormflag(0),
+                      wselfallflag(0),
                       beta_max(0),
                       rfac0(0.99363), // Set defaults for optional keywords
                       rmin0(0.0),
@@ -338,6 +340,15 @@ int SNAPImplementation::WriteParameterizedModel(KIM::ModelWriteParameterizedMode
 
     // quadraticflag
     fs << "quadraticflag " << quadraticflag << std::endl;
+
+    // bnormflag
+    fs << "bnormflag     " << bnormflag << std::endl;
+
+    // chemflag
+    fs << "chemflag      " << chemflag << std::endl;
+
+    // wselfallflag
+    fs << "wselfallflag  " << wselfallflag << std::endl;
 
     fs << "\n\n"
        << "#\n"
@@ -592,20 +603,25 @@ int SNAPImplementation::OpenParameterFiles(KIM::ModelDriverCreate *const modelDr
                                            int const numberParameterFiles,
                                            std::FILE **parameterFilePointers)
 {
+  std::string const *parameterFileDirectoryName;
+  modelDriverCreate->GetParameterFileDirectoryName(&parameterFileDirectoryName);
+
   for (int i = 0; i < numberParameterFiles; ++i)
   {
-    std::string const *parameterFileName;
+    std::string const *parameterFileBasename;
 
-    if (modelDriverCreate->GetParameterFileName(i, &parameterFileName))
+    if (modelDriverCreate->GetParameterFileBasename(i, &parameterFileBasename))
     {
-      LOG_ERROR("Unable to get the parameter file name\n");
+      LOG_ERROR("Unable to get the parameter file base name\n");
       return true;
     }
 
-    parameterFilePointers[i] = std::fopen(parameterFileName->c_str(), "r");
+    std::string const parameterFileName = *parameterFileDirectoryName + "/" + *parameterFileBasename;
+
+    parameterFilePointers[i] = std::fopen(parameterFileName.c_str(), "r");
     if (!parameterFilePointers[i])
     {
-      HELPER_LOG_ERROR("The parameter file (" + *parameterFileName + ") can not be opened\n");
+      HELPER_LOG_ERROR("The parameter file (" + *parameterFileBasename + ") can not be opened\n");
       for (int j = i - 1; i <= 0; --i)
       {
         std::fclose(parameterFilePointers[j]);
@@ -832,6 +848,28 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
       if (quadraticflag != 0 && quadraticflag != 1)
         quadraticflag = 1;
     }
+    else if (!std::strcmp(keywd, "chemflag"))
+    {
+      chemflag = std::atoi(keyval);
+      if (chemflag != 0 && chemflag != 1)
+        chemflag = 1;
+    }
+    else if (!std::strcmp(keywd, "bnormflag"))
+    {
+      bnormflag = std::atoi(keyval);
+      if (bnormflag != 0 && bnormflag != 1)
+        bnormflag = 1;
+    }
+    else if (!std::strcmp(keywd, "wselfallflag"))
+    {
+      wselfallflag = std::atoi(keyval);
+      if (wselfallflag != 0 && wselfallflag != 1)
+        wselfallflag = 1;
+    }
+    else if (!std::strcmp(keywd, "chunksize"))
+    {
+      // The keyword chunksize is ignored.
+    }
     else if (!std::strcmp(keywd, "diagonalstyle"))
     {
       int const diagonalstyle = std::atoi(keyval);
@@ -844,7 +882,7 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
                          "backward compatibility.)\n"
                          "Incorrect diagonalstyle value of " +
                          std::string(keyval) +
-                         " is given.\n");
+                         " is given\n");
         return true;
       }
     }
@@ -1218,13 +1256,6 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
             return true;
           }
 
-          // Table keyword
-          if (!keyval5)
-          {
-            HELPER_LOG_ERROR("Incorrect table style in the Hybrid parameter file (No keyword).\n");
-            return true;
-          }
-
           int const sn = tableStyleNumber - 1;
           int const nt = nTables++;
 
@@ -1232,76 +1263,35 @@ int SNAPImplementation::ProcessParameterFiles(KIM::ModelDriverCreate *const mode
           TABLE tt(tables_info[sn].tableStyle, tables_info[sn].tableLength);
           tables[nt] = std::move(tt);
 
-          std::string const *tableFileName;
-
           int tableFileNumber = 3;
           for (; tableFileNumber < numberParameterFiles; ++tableFileNumber)
           {
-            // if (modelDriverCreate->GetParameterFileName(tableFileNumber, &tableFileName))
-            // {
-            //   LOG_ERROR("Unable to get the table file name.\n");
-            //   return true;
-            // }
+            std::string const *parameterFileBasename;
 
-            // A hack to make it work
-            //
-            // KIM-API, resgisters the table file name using a unique random
-            // string which is different from the tabulated file name in the
-            // hybrid parameter file, thus we use the unqiue heywords for
-            // each interaction pair to find the associated file
-
-            bool findMatch(false);
-
+            if (modelDriverCreate->GetParameterFileBasename(tableFileNumber, &parameterFileBasename))
             {
-              // Rewind the file in case it is in the middle of the file
-              if (std::fseek(parameterFilePointers[tableFileNumber], 0, SEEK_SET))
-              {
-                HELPER_LOG_ERROR("Failed to rewind the file.\n");
-                return true;
-              }
-
-              char tmpNextLine[MAXLINE];
-
-              // Loop until section found with matching keyword
-              while (1)
-              {
-                GetNextDataLine(parameterFilePointers[tableFileNumber], tmpNextLine, MAXLINE, &endOfFileFlag);
-                if (endOfFileFlag)
-                {
-                  break;
-                }
-
-                char *word = std::strtok(tmpNextLine, " \t\n\r");
-
-                // matching keyword
-                if (!std::strcmp(word, keyval5))
-                {
-                  findMatch = true;
-                  break;
-                }
-              } // End of loop to find the matching keyword
+              LOG_ERROR("Unable to get the parameter file base name\n");
+              return true;
             }
 
-            if (findMatch)
+            if (!std::strcmp(keyval4, (*parameterFileBasename).c_str()))
             {
               break;
             }
-
-            // if (!std::strcmp(keyval4, tableFileName->c_str()))
-            // {
-            //   break;
-            // }
-
           } // End of loop throug the number of registered parameter files
 
           if (tableFileNumber >= numberParameterFiles)
           {
             HELPER_LOG_ERROR("Incorrect TABLE filename '" +
                              std::string(keyval4) +
-                             "' in the Hybrid parameter file.\n"
-                             "and/or failed to find the unique keyword '" +
-                             std::string(keyval5) +
-                             "' in the tabulated filename.\n");
+                             "' in the Hybrid parameter file.\n");
+            return true;
+          }
+
+          // Table keyword
+          if (!keyval5)
+          {
+            HELPER_LOG_ERROR("Incorrect table style in the Hybrid parameter file (No table keyword).\n");
             return true;
           }
 
@@ -1641,11 +1631,21 @@ int SNAPImplementation::setRefreshMutableValues(ModelObj *const modelObj)
     ncoeff = ncoeffall - 1;
   }
 
+  if (bnormflag != chemflag)
+  {
+    HELPER_LOG_WARNING("Incorrect SNAP parameter file.\n"
+                       "'bnormflag' and 'chemflag' are not equal. "
+                       "This is probably not what you intended\n")
+  }
+
   // We have to creat the SNAP object and do the extra check on
   // the number of coefficients
 
   // Construct the SNAP object
-  snap.reset(new SNA(rfac0, twojmax, rmin0, switchflag, bzeroflag));
+  snap.reset(new SNA(rfac0, twojmax, rmin0,
+                     switchflag, bzeroflag,
+                     chemflag, bnormflag,
+                     wselfallflag, nelements));
 
   // Extra check
   if (ncoeff != snap->ncoeff)
@@ -1958,6 +1958,36 @@ int SNAPImplementation::RegisterKIMParameters(KIM::ModelDriverCreate *const mode
     return ier;
   }
 
+  ier = modelDriverCreate->SetParameterPointer(1, &bnormflag, "bnormflag",
+                                               "0 or 1\n "
+                                               "0 = do nothing,\n "
+                                               "1 = if barray divided by j+1.");
+  if (ier)
+  {
+    LOG_ERROR("SetParameterPointer bnormflag");
+    return ier;
+  }
+
+  ier = modelDriverCreate->SetParameterPointer(1, &chemflag, "chemflag",
+                                               "0 or 1\n "
+                                               "0 = do nothing,\n "
+                                               "1 = for multi-element bispectrum components.");
+  if (ier)
+  {
+    LOG_ERROR("SetParameterPointer chemflag");
+    return ier;
+  }
+
+  ier = modelDriverCreate->SetParameterPointer(1, &wselfallflag, "wselfallflag",
+                                               "0 or 1\n "
+                                               "0 = do nothing,\n "
+                                               "1 = add wself to all element labelings.");
+  if (ier)
+  {
+    LOG_ERROR("SetParameterPointer wselfallflag");
+    return ier;
+  }
+
   if (nzbls)
   {
     ier = modelDriverCreate->SetParameterPointer(1, &inner, "zbl_inner",
@@ -2072,18 +2102,33 @@ void SNAPImplementation::computeBispectrum(KIM::ModelComputeArguments const *con
             snap->inside[ninside] = j;
             snap->wj[ninside] = wjelem[jSpecies];
             snap->rcutij[ninside] = (radi + radelem[jSpecies]) * rcutfac;
+            snap->element[ninside] = jSpecies;
             ++ninside;
           }
         }
       }
 
-      snap->compute_ui(ninside);
+      if (chemflag)
+      {
+        snap->compute_ui(ninside, iSpecies);
+      }
+      else
+      {
+        snap->compute_ui(ninside, 0);
+      }
 
       snap->compute_zi();
 
-      snap->compute_bi();
+      if (chemflag)
+      {
+        snap->compute_bi(iSpecies);
+      }
+      else
+      {
+        snap->compute_bi(0);
+      }
 
-      auto Bi = bispectrum.data_1D(contributing_index++);
+      double *const Bi = &bispectrum(contributing_index++, 0);
       for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
       {
         Bi[icoeff] = snap->blist[icoeff];
@@ -2114,13 +2159,11 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes, int const 
 
       {
         // Get the 1D view to the 2D coeffelem array at row iSpecies
-        auto coeffi = coeffelem.data_1D(iSpecies);
-
         // Get the pointer to the raw data + 1 to avoid extra sum
-        double *Ci = coeffi.data() + 1;
+        double *Ci = &coeffelem(iSpecies, 1);
 
         // Get the 1D view to the 2D beta array at row i
-        auto bi = beta.data_1D(contributing_index);
+        double *const bi = &beta(contributing_index, 0);
 
         for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
         {
@@ -2131,7 +2174,7 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes, int const 
         --Ci;
 
         // Get the 1D view to the 2D bispectrum array at row i
-        auto Bi = bispectrum.data_1D(contributing_index++);
+        double const *const Bi = &bispectrum(contributing_index++, 0);
 
         int k = ncoeff + 1;
 
@@ -2165,13 +2208,11 @@ void SNAPImplementation::computeBeta(int const *particleSpeciesCodes, int const 
       if (snapflag[iSpecies])
       {
         // Get the 1D view to the 2D coeffelem array at row iSpecies
-        auto coeffi = coeffelem.data_1D(iSpecies);
-
         // Get the pointer to the raw data + 1 to avoid extra sum
-        double *Ci = coeffi.data() + 1;
+        double *Ci = &coeffelem(iSpecies, 1);
 
         // Get the 1D view to the 2D beta array at row i
-        auto bi = beta.data_1D(contributing_index++);
+        double *const bi = &beta(contributing_index++, 0);
 
         for (int icoeff = 0; icoeff < ncoeff; ++icoeff)
         {
@@ -2344,6 +2385,7 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
               snap->wj[ninside] = wjelem[jSpecies];
               // Get the pair of iSpecies & jSpecies cutoff
               snap->rcutij[ninside] = (radi + radelem[jSpecies]) * rcutfac;
+              snap->element[ninside] = jSpecies;
               ++ninside;
             }
             else
@@ -2353,6 +2395,7 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
               snap->rij(noutside, 1) = dy;
               snap->rij(noutside, 2) = dz;
               snap->inside[noutside] = j;
+              snap->element[noutside] = jSpecies;
             }
           }
           else
@@ -2362,18 +2405,24 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
             snap->rij(noutside, 1) = dy;
             snap->rij(noutside, 2) = dz;
             snap->inside[noutside] = j;
+            snap->element[noutside] = jSpecies;
           }
         }
 
         // compute Ui, Yi for atom i
-        snap->compute_ui(ninside);
+        if (chemflag)
+        {
+          snap->compute_ui(ninside, iSpecies);
+        }
+        else
+        {
+          snap->compute_ui(ninside, 0);
+        }
 
         // Get the 1D view to the 2D beta array at row i
-        auto betai = beta.data_1D(contributing_index);
-
         // Get the pointer to the beta array of data for atom i
-        double const *const bi = const_cast<double *>(betai.data());
-
+        double const *const bi = &beta(contributing_index, 0);
+        
         snap->compute_yi(bi);
       }
       else
@@ -2384,6 +2433,9 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
           // Index of the neighbor atom
           int const j = n1atom[n];
 
+          // Get the species index for atom j
+          int const jSpecies = particleSpeciesCodes[j];
+
           double const dx = coordinates[j][0] - xi;
           double const dy = coordinates[j][1] - yi;
           double const dz = coordinates[j][2] - zi;
@@ -2392,6 +2444,7 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
           snap->rij(n, 1) = dy;
           snap->rij(n, 2) = dz;
           snap->inside[n] = j;
+          snap->element[n] = jSpecies;
         }
       }
 
@@ -2439,10 +2492,8 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
         }
 
         // Get the 1D view to the 2D snap->rij array at row n
-        auto rij = snap->rij.data_1D(n);
-
         // Get the pointer to the rij_const array of data
-        double const *const rij_const = const_cast<double *>(rij.data());
+        double const *const rij_const = &snap->rij(n, 0);
 
         double const rsq = rij_const[0] * rij_const[0] + rij_const[1] * rij_const[1] + rij_const[2] * rij_const[2];
         double const rrsq = std::sqrt(rsq);
@@ -2459,7 +2510,14 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
 
         if (lsnap)
         {
-          snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], n);
+          if (chemflag)
+          {
+            snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], n, snap->element[n]);
+          }
+          else
+          {
+            snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], n, 0);
+          }
 
           snap->compute_deidrj(deidrj);
         }
@@ -2782,17 +2840,17 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
           // Energy of particle i, sum over coeffs_k * Bi_k
 
           // Get the 1D view to the 2D coeffelem array at row iSpecies
-          auto coeffi = coeffelem.data_1D(iSpecies);
+          double *Ci = &coeffelem(iSpecies, 0);
 
           // Compute phi
-          double phi = coeffi[0];
+          double phi = Ci[0];
 
           // Get the pointer to the raw data + 1 to avoid extra summation
-          double *Ci = coeffi.data() + 1;
+          ++Ci;
 
           // Get the bispectrum of particle i
           // Get the 1D view to the 2D bispectrum array at row i
-          auto Bi = bispectrum.data_1D(contributing_index);
+          double const *const Bi = &bispectrum(contributing_index, 0);
 
           // E = beta.B + 0.5*B^t.alpha.B
 
@@ -2903,20 +2961,26 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
           snap->wj[ninside] = wjelem[jSpecies];
           // Get the pair of iSpecies & jSpecies cutoff
           snap->rcutij[ninside] = (radi + radelem[jSpecies]) * rcutfac;
+          snap->element[ninside] = jSpecies;
           ++ninside;
         }
       }
 
       // compute Ui, Yi for atom i
       {
-        snap->compute_ui(ninside);
+        if (chemflag)
+        {
+          snap->compute_ui(ninside, iSpecies);
+        }
+        else
+        {
+          snap->compute_ui(ninside, 0);
+        }
 
         // Get the 1D view to the 2D beta array at row i
-        auto betai = beta.data_1D(contributing_index);
-
         // Get the pointer to the beta array of data for atom i
-        double const *const bi = const_cast<double *>(betai.data());
-
+        double const *const bi = &beta(contributing_index, 0);
+        
         snap->compute_yi(bi);
       }
 
@@ -2931,12 +2995,17 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
       for (int n = 0; n < ninside; ++n)
       {
         // Get the 1D view to the 2D snap->rij array at row n
-        auto rij = snap->rij.data_1D(n);
-
         // Get the pointer to the rij_const array of data
-        double const *const rij_const = const_cast<double *>(rij.data());
-
-        snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], n);
+        double const *const rij_const = &snap->rij(n, 0);
+        
+        if (chemflag)
+        {
+          snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], n, snap->element[n]);
+        }
+        else
+        {
+          snap->compute_duidrj(rij_const, snap->wj[n], snap->rcutij[n], n, 0);
+        }
 
         snap->compute_deidrj(deidrj);
 
@@ -3026,17 +3095,17 @@ int SNAPImplementation::Compute(KIM::ModelCompute const *const /* modelCompute *
         // Energy of particle i, sum over coeffs_k * Bi_k
 
         // Get the 1D view to the 2D coeffelem array at row iSpecies
-        auto coeffi = coeffelem.data_1D(iSpecies);
+        double *Ci = &coeffelem(iSpecies, 0);
 
         // Compute phi
-        double phi = coeffi[0];
+        double phi = Ci[0];
 
         // Get the pointer to the raw data + 1 to avoid extra summation
-        double *Ci = coeffi.data() + 1;
+        ++Ci;
 
         // Get the bispectrum of particle i
         // Get the 1D view to the 2D bispectrum array at row i
-        auto Bi = bispectrum.data_1D(contributing_index);
+        double const *const Bi = &bispectrum(contributing_index, 0);
 
         // E = beta.B + 0.5*B^t.alpha.B
 

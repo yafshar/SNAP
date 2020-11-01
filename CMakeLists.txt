@@ -23,43 +23,33 @@
 #
 
 #
-# Copyright (c) 2013--2019, Regents of the University of Minnesota.
+# Copyright (c) 2019--2020, Regents of the University of Minnesota.
 # All rights reserved.
 #
 # Contributors:
-#    Richard Berger
-#    Christoph Junghans
 #    Ryan S. Elliott
 #    Yaser Afshar
 #
 
-
-# Required preamble
-
-cmake_minimum_required(VERSION 3.4)
+cmake_minimum_required(VERSION 3.10)
 
 list(APPEND CMAKE_PREFIX_PATH $ENV{KIM_API_CMAKE_PREFIX_DIR})
-find_package(KIM-API 2.0 REQUIRED CONFIG)
-if(NOT TARGET kim-api)
-  enable_testing()
-  project("${KIM_API_PROJECT_NAME}" VERSION "${KIM_API_VERSION}"
-    LANGUAGES CXX C Fortran)
-endif()
+find_package(KIM-API-ITEMS 2.2 REQUIRED CONFIG)
 
-# End preamble
+kim_api_items_setup_before_project(ITEM_TYPE "modelDriver")
+project(SNAP__MD_536750310735_001 LANGUAGES CXX)
+kim_api_items_setup_after_project(ITEM_TYPE "modelDriver")
 
 # This model driver requires C++11
 set(CMAKE_CXX_STANDARD 11)
 
-set(MODEL_DRIVER_NAME "SNAP__MD_536750310735_000")
-
 add_kim_api_model_driver_library(
-  NAME                    ${MODEL_DRIVER_NAME}
+  NAME                    ${PROJECT_NAME}
   CREATE_ROUTINE_NAME     "model_driver_create"
   CREATE_ROUTINE_LANGUAGE "cpp"
   )
 
-target_sources(${MODEL_DRIVER_NAME} PRIVATE
+target_sources(${PROJECT_NAME} PRIVATE
   SNAP.cpp
   SNAPImplementation.cpp
   SNA.cpp
